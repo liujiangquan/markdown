@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markdown Editor</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+
+  <body>
+    <div class="app">
+      <!-- 合并的标题栏和工具栏 -->
+      <header class="title-toolbar">
+        <div class="title-section">
+          <h1 class="app-title">Markdown Editor</h1>
+          <span id="filename" class="filename">未命名文档</span>
+        </div>
+        
+        <div class="toolbar-section">
+          <div class="toolbar-group">
+            <button id="new-btn" class="btn btn-primary" title="新建文档">
+              <span class="icon">📄</span>
+              新建
+            </button>
+            <button id="open-btn" class="btn" title="打开文件">
+              <span class="icon">📂</span>
+              打开
+            </button>
+            <button id="save-btn" class="btn" title="保存文件">
+              <span class="icon">💾</span>
+              保存
+            </button>
+          </div>
+          
+          <div class="toolbar-group">
+            <button id="preview-toggle" class="btn btn-secondary" title="切换预览模式">
+              <span class="icon">👁️</span>
+              预览
+            </button>
+            <button id="sync-scroll-btn" class="btn btn-sync" title="同步滚动" data-enabled="true">
+              <span class="icon">🔗</span>
+              同步
+            </button>
+            <button id="fullscreen-btn" class="btn" title="全屏预览">
+              <span class="icon">⛶</span>
+              全屏
+            </button>
+          </div>
+          
+          <div class="toolbar-group">
+            <select id="theme-selector" class="theme-selector" title="选择主题">
+              <option value="light">🌞 浅色主题</option>
+              <option value="dark">🌙 暗黑主题</option>
+              <option value="auto">🔄 自动切换</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <!-- 主内容区域 -->
+      <main class="main-content">
+        <!-- 编辑器区域 -->
+        <div id="editor-panel" class="panel editor-panel">
+          <textarea id="markdown-editor" class="editor" placeholder="开始编写你的 Markdown 内容..."></textarea>
+        </div>
+
+        <!-- 预览区域 -->
+        <div id="preview-panel" class="panel preview-panel">
+          <div id="preview-content" class="preview-content"></div>
+        </div>
+      </main>
+
+      <!-- 状态栏 -->
+      <footer class="status-bar">
+        <span id="status-text">就绪</span>
+        <span id="word-count">字数: 0</span>
+      </footer>
+    </div>
+
+    <!-- 全屏预览模态框 -->
+    <div id="fullscreen-modal" class="fullscreen-modal">
+      <div class="fullscreen-header">
+        <button id="close-fullscreen" class="btn btn-close" title="关闭全屏">
+          <span class="icon">✕</span>
+        </button>
+      </div>
+      <div id="fullscreen-content" class="fullscreen-content"></div>
+    </div>
+  </body>
+</html>
