@@ -15,7 +15,6 @@ const undoBtn = document.getElementById('undo-btn');
 const redoBtn = document.getElementById('redo-btn');
 const findBtn = document.getElementById('find-btn');
 const replaceBtn = document.getElementById('replace-btn');
-const previewToggle = document.getElementById('preview-toggle');
 const syncScrollBtn = document.getElementById('sync-scroll-btn');
 const exportBtn = document.getElementById('export-btn');
 const themeSelector = document.getElementById('theme-selector');
@@ -36,9 +35,18 @@ const replaceAllBtn = document.getElementById('replace-all');
 const editorPanel = document.getElementById('editor-panel');
 const previewPanel = document.getElementById('preview-panel');
 
+// 全屏预览元素
+const fullscreenModal = document.getElementById('fullscreen-modal');
+const fullscreenContent = document.getElementById('fullscreen-content');
+const closeFullscreenBtn = document.getElementById('close-fullscreen');
+const fullscreenBtn = document.getElementById('fullscreen-btn');
+
+// 全屏目录元素
+const fullscreenTocPanel = document.getElementById('fullscreen-toc-panel');
+const fullscreenTocContent = document.getElementById('fullscreen-toc-content');
+
 // 状态变量
 let currentContent = '';
-let isPreviewMode = false;
 let isScrolling = false; // 防止循环滚动
 let syncScrollEnabled = true; // 同步滚动开关
 let currentTheme = 'auto'; // 当前主题
@@ -46,6 +54,8 @@ let history = []; // 撤销重做历史
 let historyIndex = -1; // 当前历史索引
 let currentSearchIndex = -1; // 当前搜索索引
 let searchResults = []; // 搜索结果
+let isFullscreen = false; // 是否全屏模式
+let fullscreenTocItems = []; // 全屏目录项列表
 
 // 初始化应用
 function init() {
@@ -54,6 +64,7 @@ function init() {
   updatePreview();
   updateWordCount();
   initTheme();
+  setupFullscreenTocScrollListener();
 }
 
 // 设置事件监听器
@@ -77,7 +88,6 @@ function setupEventListeners() {
     console.log('编辑功能按钮事件监听器已设置');
     
     // 预览相关按钮
-    previewToggle.addEventListener('click', togglePreviewMode);
     syncScrollBtn.addEventListener('click', toggleSyncScroll);
     console.log('预览相关按钮事件监听器已设置');
     
@@ -99,12 +109,24 @@ function setupEventListeners() {
     themeSelector.addEventListener('change', handleThemeChange);
     console.log('主题切换事件监听器已设置');
     
+    // 全屏预览按钮
+    fullscreenBtn.addEventListener('click', openFullscreen);
+    closeFullscreenBtn.addEventListener('click', closeFullscreen);
+    console.log('全屏预览按钮事件监听器已设置');
+    
     // 模态框事件
     closeModalBtn.addEventListener('click', closeFindReplaceModal);
     closeModalBtn2.addEventListener('click', closeFindReplaceModal);
     findReplaceModal.addEventListener('click', (e) => {
       if (e.target === findReplaceModal) {
         closeFindReplaceModal();
+      }
+    });
+    
+    // 全屏模态框点击外部关闭
+    fullscreenModal.addEventListener('click', (e) => {
+      if (e.target === fullscreenModal) {
+        closeFullscreen();
       }
     });
     findNextBtn.addEventListener('click', handleFindNext);
@@ -279,14 +301,27 @@ function updatePreview() {
     const html = marked.parse(currentContent);
     preview.innerHTML = html;
     
+    // 如果当前是全屏模式，同时更新全屏内容
+    if (isFullscreen) {
+      fullscreenContent.innerHTML = html;
+    }
+    
     // 增强代码块
     enhanceCodeBlocks();
     
     // 渲染 Mermaid 图表
     renderMermaidDiagrams();
+    
+    // 生成全屏目录
+    if (isFullscreen) {
+      generateFullscreenToc();
+    }
   } else {
     // 如果 marked 库未加载，显示纯文本
     preview.innerHTML = `<pre>${currentContent}</pre>`;
+    if (isFullscreen) {
+      fullscreenContent.innerHTML = `<pre>${currentContent}</pre>`;
+    }
   }
 }
 
@@ -498,24 +533,6 @@ async function handleSaveFile() {
   }
 }
 
-// 切换预览模式
-function togglePreviewMode() {
-  isPreviewMode = !isPreviewMode;
-  
-  if (isPreviewMode) {
-    // 隐藏编辑器，显示预览
-    editorPanel.style.display = 'none';
-    previewPanel.style.flex = '1';
-    previewToggle.textContent = '👁️ 编辑';
-    previewToggle.classList.add('active');
-  } else {
-    // 显示编辑器，显示预览
-    editorPanel.style.display = 'flex';
-    previewPanel.style.flex = '1';
-    previewToggle.textContent = '👁️ 预览';
-    previewToggle.classList.remove('active');
-  }
-}
 
 // 切换同步滚动
 function toggleSyncScroll() {
@@ -667,6 +684,22 @@ function handleKeyboardShortcuts(e) {
     themeSelector.value = themes[nextIndex];
     handleThemeChange();
   }
+  
+  // F11: 全屏预览
+  if (e.key === 'F11') {
+    e.preventDefault();
+    if (isFullscreen) {
+      closeFullscreen();
+    } else {
+      openFullscreen();
+    }
+  }
+  
+  // Escape: 关闭全屏
+  if (e.key === 'Escape' && isFullscreen) {
+    closeFullscreen();
+  }
+  
 }
 
 // 添加状态样式
@@ -922,6 +955,176 @@ function saveToHistory() {
       historyIndex--;
     }
   }
+}
+
+// 打开全屏预览
+function openFullscreen() {
+  isFullscreen = true;
+  fullscreenModal.classList.add('active');
+  
+  console.log('进入全屏模式，开始生成目录...');
+  console.log('目录面板元素:', fullscreenTocPanel);
+  console.log('目录面板可见性:', fullscreenTocPanel.style.display);
+  
+  // 确保全屏内容与预览内容一致
+  if (typeof marked !== 'undefined') {
+    const html = marked.parse(currentContent);
+    fullscreenContent.innerHTML = html;
+    
+    // 增强全屏内容中的代码块
+    enhanceCodeBlocks();
+    
+    // 渲染全屏内容中的 Mermaid 图表
+    renderMermaidDiagrams();
+    
+    // 生成全屏目录
+    console.log('开始生成全屏目录...');
+    generateFullscreenToc();
+    console.log('全屏目录生成完成，目录项数量:', fullscreenTocItems.length);
+  } else {
+    fullscreenContent.innerHTML = `<pre>${currentContent}</pre>`;
+  }
+  
+  showStatus('已进入全屏预览模式', 'info');
+}
+
+// 关闭全屏预览
+function closeFullscreen() {
+  isFullscreen = false;
+  fullscreenModal.classList.remove('active');
+  showStatus('已退出全屏预览模式', 'info');
+}
+
+
+// 生成全屏目录
+function generateFullscreenToc() {
+  const headings = fullscreenContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  fullscreenTocItems = [];
+  
+  if (headings.length === 0) {
+    clearFullscreenToc();
+    return;
+  }
+  
+  // 为每个标题添加ID
+  headings.forEach((heading, index) => {
+    const id = `fullscreen-heading-${index}`;
+    heading.id = id;
+    
+    const level = parseInt(heading.tagName.charAt(1));
+    const text = heading.textContent.trim();
+    
+    fullscreenTocItems.push({
+      id: id,
+      level: level,
+      text: text,
+      element: heading
+    });
+  });
+  
+  renderFullscreenToc();
+}
+
+// 渲染全屏目录
+function renderFullscreenToc() {
+  console.log('renderFullscreenToc 被调用，目录项数量:', fullscreenTocItems.length);
+  
+  if (fullscreenTocItems.length === 0) {
+    console.log('没有目录项，清空目录');
+    clearFullscreenToc();
+    return;
+  }
+  
+  const tocList = document.createElement('ul');
+  tocList.className = 'toc-list';
+  
+  fullscreenTocItems.forEach(item => {
+    const li = document.createElement('li');
+    li.className = `toc-item level-${item.level}`;
+    
+    const link = document.createElement('a');
+    link.href = `#${item.id}`;
+    link.className = 'toc-link';
+    link.textContent = item.text;
+    
+    // 添加点击事件
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToFullscreenHeading(item.id);
+    });
+    
+    li.appendChild(link);
+    tocList.appendChild(li);
+  });
+  
+  fullscreenTocContent.innerHTML = '';
+  fullscreenTocContent.appendChild(tocList);
+  
+  console.log('目录渲染完成，目录面板可见性:', fullscreenTocPanel.style.display);
+  console.log('目录面板类名:', fullscreenTocPanel.className);
+  
+  // 监听滚动事件，更新活动目录项
+  updateActiveFullscreenTocItem();
+}
+
+// 清空全屏目录
+function clearFullscreenToc() {
+  fullscreenTocContent.innerHTML = '<div class="toc-placeholder">开始编写文档以生成目录...</div>';
+  fullscreenTocItems = [];
+}
+
+// 滚动到全屏指定标题
+function scrollToFullscreenHeading(headingId) {
+  const heading = document.getElementById(headingId);
+  if (heading) {
+    heading.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'start' 
+    });
+    
+    // 更新活动目录项
+    updateActiveFullscreenTocItem();
+    
+    showStatus(`已跳转到: ${heading.textContent}`, 'success');
+  }
+}
+
+// 更新全屏活动目录项
+function updateActiveFullscreenTocItem() {
+  const tocLinks = fullscreenTocContent.querySelectorAll('.toc-link');
+  const headings = fullscreenContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  
+  // 清除所有活动状态
+  tocLinks.forEach(link => link.classList.remove('active'));
+  
+  // 找到当前可见的标题
+  let activeHeading = null;
+  
+  for (let i = headings.length - 1; i >= 0; i--) {
+    const heading = headings[i];
+    const rect = heading.getBoundingClientRect();
+    const fullscreenRect = fullscreenContent.getBoundingClientRect();
+    
+    if (rect.top <= fullscreenRect.top + 100) {
+      activeHeading = heading;
+      break;
+    }
+  }
+  
+  // 设置活动状态
+  if (activeHeading) {
+    const activeLink = fullscreenTocContent.querySelector(`a[href="#${activeHeading.id}"]`);
+    if (activeLink) {
+      activeLink.classList.add('active');
+    }
+  }
+}
+
+// 监听全屏预览区域滚动，更新活动目录项
+function setupFullscreenTocScrollListener() {
+  fullscreenContent.addEventListener('scroll', () => {
+    updateActiveFullscreenTocItem();
+  });
 }
 
 // 页面加载完成后初始化应用

@@ -61,10 +61,6 @@
         <!-- 右侧：预览和设置 -->
         <div class="toolbar-section toolbar-right">
           <div class="toolbar-group">
-            <button id="preview-toggle" class="btn btn-secondary" title="切换预览模式 (F11)">
-              <span class="icon">👁️</span>
-              预览
-            </button>
             <button id="sync-scroll-btn" class="btn btn-sync" title="同步滚动 (Ctrl+Shift+S)" data-enabled="true">
               <span class="icon">🔗</span>
               同步
@@ -72,6 +68,10 @@
             <button id="export-btn" class="btn" title="导出为HTML">
               <span class="icon">📤</span>
               导出
+            </button>
+            <button id="fullscreen-btn" class="btn" title="全屏预览 (F11)">
+              <span class="icon">⛶</span>
+              全屏
             </button>
           </div>
           
@@ -103,6 +103,32 @@
         <span id="status-text">就绪</span>
         <span id="word-count">字数: 0</span>
       </footer>
+
+      <!-- 全屏预览模态框 -->
+      <div id="fullscreen-modal" class="fullscreen-modal">
+        <div class="fullscreen-header">
+          <div class="fullscreen-toolbar">
+            <button id="close-fullscreen" class="btn btn-close" title="关闭全屏 (Esc)">
+              <span class="icon">✕</span>
+              关闭
+            </button>
+          </div>
+        </div>
+        <div class="fullscreen-content-wrapper">
+          <!-- 全屏目录区域 -->
+          <div id="fullscreen-toc-panel" class="fullscreen-toc-panel">
+            <div class="fullscreen-toc-header">
+              <h3 class="fullscreen-toc-title">📋 文档目录</h3>
+            </div>
+            <div id="fullscreen-toc-content" class="fullscreen-toc-content">
+              <div class="toc-placeholder">开始编写文档以生成目录...</div>
+            </div>
+          </div>
+          
+          <!-- 全屏预览内容区域 -->
+          <div id="fullscreen-content" class="fullscreen-content"></div>
+        </div>
+      </div>
 
       <!-- 查找替换模态框 -->
       <div id="find-replace-modal" class="modal">
