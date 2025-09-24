@@ -12,49 +12,74 @@
 
   <body>
     <div class="app">
-      <!-- 合并的标题栏和工具栏 -->
-      <header class="title-toolbar">
-        <div class="title-section">
-          <h1 class="app-title">Markdown Editor</h1>
-          <span id="filename" class="filename">未命名文档</span>
-        </div>
-        
-        <div class="toolbar-section">
+      <!-- 工具栏 -->
+      <header class="toolbar">
+        <!-- 左侧：文件操作 -->
+        <div class="toolbar-section toolbar-left">
           <div class="toolbar-group">
-            <button id="new-btn" class="btn btn-primary" title="新建文档">
+            <button id="new-btn" class="btn btn-primary" title="新建文档 (Ctrl+N)">
               <span class="icon">📄</span>
               新建
             </button>
-            <button id="open-btn" class="btn" title="打开文件">
+            <button id="open-btn" class="btn" title="打开文件 (Ctrl+O)">
               <span class="icon">📂</span>
               打开
             </button>
-            <button id="save-btn" class="btn" title="保存文件">
+            <button id="save-btn" class="btn" title="保存文件 (Ctrl+S)">
               <span class="icon">💾</span>
               保存
             </button>
+            <button id="save-as-btn" class="btn" title="另存为 (Ctrl+Shift+S)">
+              <span class="icon">💾</span>
+              另存为
+            </button>
           </div>
-          
+        </div>
+
+        <!-- 中间：编辑功能 -->
+        <div class="toolbar-section toolbar-center">
           <div class="toolbar-group">
-            <button id="preview-toggle" class="btn btn-secondary" title="切换预览模式">
+            <button id="undo-btn" class="btn" title="撤销 (Ctrl+Z)">
+              <span class="icon">↶</span>
+              撤销
+            </button>
+            <button id="redo-btn" class="btn" title="重做 (Ctrl+Y)">
+              <span class="icon">↷</span>
+              重做
+            </button>
+            <button id="find-btn" class="btn" title="查找 (Ctrl+F)">
+              <span class="icon">🔍</span>
+              查找
+            </button>
+            <button id="replace-btn" class="btn" title="替换 (Ctrl+H)">
+              <span class="icon">🔄</span>
+              替换
+            </button>
+          </div>
+        </div>
+
+        <!-- 右侧：预览和设置 -->
+        <div class="toolbar-section toolbar-right">
+          <div class="toolbar-group">
+            <button id="preview-toggle" class="btn btn-secondary" title="切换预览模式 (F11)">
               <span class="icon">👁️</span>
               预览
             </button>
-            <button id="sync-scroll-btn" class="btn btn-sync" title="同步滚动" data-enabled="true">
+            <button id="sync-scroll-btn" class="btn btn-sync" title="同步滚动 (Ctrl+Shift+S)" data-enabled="true">
               <span class="icon">🔗</span>
               同步
             </button>
-            <button id="fullscreen-btn" class="btn" title="全屏预览">
-              <span class="icon">⛶</span>
-              全屏
+            <button id="export-btn" class="btn" title="导出为HTML">
+              <span class="icon">📤</span>
+              导出
             </button>
           </div>
           
           <div class="toolbar-group">
-            <select id="theme-selector" class="theme-selector" title="选择主题">
-              <option value="light">🌞 浅色主题</option>
-              <option value="dark">🌙 暗黑主题</option>
-              <option value="auto">🔄 自动切换</option>
+            <select id="theme-selector" class="theme-selector" title="选择主题 (Ctrl+Shift+T)">
+              <option value="light">🌞 浅色</option>
+              <option value="dark">🌙 暗黑</option>
+              <option value="auto">🔄 自动</option>
             </select>
           </div>
         </div>
@@ -78,16 +103,45 @@
         <span id="status-text">就绪</span>
         <span id="word-count">字数: 0</span>
       </footer>
+
+      <!-- 查找替换模态框 -->
+      <div id="find-replace-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>查找和替换</h3>
+            <button id="close-modal" class="btn btn-close" title="关闭">
+              <span class="icon">✕</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="find-input">查找:</label>
+              <input type="text" id="find-input" class="form-input" placeholder="输入要查找的文本">
+            </div>
+            <div class="form-group">
+              <label for="replace-input">替换为:</label>
+              <input type="text" id="replace-input" class="form-input" placeholder="输入替换文本">
+            </div>
+            <div class="form-options">
+              <label class="checkbox-label">
+                <input type="checkbox" id="case-sensitive">
+                区分大小写
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="whole-word">
+                全词匹配
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button id="find-next" class="btn btn-primary">查找下一个</button>
+            <button id="replace-current" class="btn">替换当前</button>
+            <button id="replace-all" class="btn btn-secondary">全部替换</button>
+            <button id="close-modal-btn" class="btn">关闭</button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- 全屏预览模态框 -->
-    <div id="fullscreen-modal" class="fullscreen-modal">
-      <div class="fullscreen-header">
-        <button id="close-fullscreen" class="btn btn-close" title="关闭全屏">
-          <span class="icon">✕</span>
-        </button>
-      </div>
-      <div id="fullscreen-content" class="fullscreen-content"></div>
-    </div>
   </body>
 </html>

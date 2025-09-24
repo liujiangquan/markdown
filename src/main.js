@@ -3,9 +3,6 @@ const { invoke } = window.__TAURI__.core;
 // DOM 元素
 const editor = document.getElementById('markdown-editor');
 const preview = document.getElementById('preview-content');
-const fullscreenModal = document.getElementById('fullscreen-modal');
-const fullscreenContent = document.getElementById('fullscreen-content');
-const filenameSpan = document.getElementById('filename');
 const statusText = document.getElementById('status-text');
 const wordCountSpan = document.getElementById('word-count');
 
@@ -13,11 +10,27 @@ const wordCountSpan = document.getElementById('word-count');
 const newBtn = document.getElementById('new-btn');
 const openBtn = document.getElementById('open-btn');
 const saveBtn = document.getElementById('save-btn');
+const saveAsBtn = document.getElementById('save-as-btn');
+const undoBtn = document.getElementById('undo-btn');
+const redoBtn = document.getElementById('redo-btn');
+const findBtn = document.getElementById('find-btn');
+const replaceBtn = document.getElementById('replace-btn');
 const previewToggle = document.getElementById('preview-toggle');
 const syncScrollBtn = document.getElementById('sync-scroll-btn');
-const fullscreenBtn = document.getElementById('fullscreen-btn');
-const closeFullscreenBtn = document.getElementById('close-fullscreen');
+const exportBtn = document.getElementById('export-btn');
 const themeSelector = document.getElementById('theme-selector');
+
+// 模态框元素
+const findReplaceModal = document.getElementById('find-replace-modal');
+const closeModalBtn = document.getElementById('close-modal');
+const closeModalBtn2 = document.getElementById('close-modal-btn');
+const findInput = document.getElementById('find-input');
+const replaceInput = document.getElementById('replace-input');
+const caseSensitiveCheck = document.getElementById('case-sensitive');
+const wholeWordCheck = document.getElementById('whole-word');
+const findNextBtn = document.getElementById('find-next');
+const replaceCurrentBtn = document.getElementById('replace-current');
+const replaceAllBtn = document.getElementById('replace-all');
 
 // 面板元素
 const editorPanel = document.getElementById('editor-panel');
@@ -26,10 +39,13 @@ const previewPanel = document.getElementById('preview-panel');
 // 状态变量
 let currentContent = '';
 let isPreviewMode = false;
-let isFullscreen = false;
 let isScrolling = false; // 防止循环滚动
 let syncScrollEnabled = true; // 同步滚动开关
 let currentTheme = 'auto'; // 当前主题
+let history = []; // 撤销重做历史
+let historyIndex = -1; // 当前历史索引
+let currentSearchIndex = -1; // 当前搜索索引
+let searchResults = []; // 搜索结果
 
 // 初始化应用
 function init() {
@@ -49,13 +65,20 @@ function setupEventListeners() {
     newBtn.addEventListener('click', handleNewFile);
     openBtn.addEventListener('click', handleOpenFile);
     saveBtn.addEventListener('click', handleSaveFile);
+    saveAsBtn.addEventListener('click', handleSaveAsFile);
     console.log('文件操作按钮事件监听器已设置');
+    
+    // 编辑功能按钮
+    undoBtn.addEventListener('click', handleUndo);
+    redoBtn.addEventListener('click', handleRedo);
+    findBtn.addEventListener('click', openFindReplaceModal);
+    replaceBtn.addEventListener('click', openFindReplaceModal);
+    exportBtn.addEventListener('click', handleExport);
+    console.log('编辑功能按钮事件监听器已设置');
     
     // 预览相关按钮
     previewToggle.addEventListener('click', togglePreviewMode);
     syncScrollBtn.addEventListener('click', toggleSyncScroll);
-    fullscreenBtn.addEventListener('click', openFullscreen);
-    closeFullscreenBtn.addEventListener('click', closeFullscreen);
     console.log('预览相关按钮事件监听器已设置');
     
     // 编辑器内容变化
@@ -71,16 +94,23 @@ function setupEventListeners() {
     document.addEventListener('keydown', handleKeyboardShortcuts);
     console.log('键盘快捷键事件监听器已设置');
     
-    // 全屏模态框点击外部关闭
-    fullscreenModal.addEventListener('click', (e) => {
-      if (e.target === fullscreenModal) {
-        closeFullscreen();
-      }
-    });
     
     // 主题切换
     themeSelector.addEventListener('change', handleThemeChange);
     console.log('主题切换事件监听器已设置');
+    
+    // 模态框事件
+    closeModalBtn.addEventListener('click', closeFindReplaceModal);
+    closeModalBtn2.addEventListener('click', closeFindReplaceModal);
+    findReplaceModal.addEventListener('click', (e) => {
+      if (e.target === findReplaceModal) {
+        closeFindReplaceModal();
+      }
+    });
+    findNextBtn.addEventListener('click', handleFindNext);
+    replaceCurrentBtn.addEventListener('click', handleReplaceCurrent);
+    replaceAllBtn.addEventListener('click', handleReplaceAll);
+    console.log('模态框事件监听器已设置');
     
     console.log('所有事件监听器设置完成');
   } catch (error) {
@@ -235,6 +265,12 @@ function handleEditorChange() {
   currentContent = editor.value;
   updatePreview();
   updateWordCount();
+  
+  // 延迟保存历史记录，避免频繁保存
+  clearTimeout(handleEditorChange.timeoutId);
+  handleEditorChange.timeoutId = setTimeout(() => {
+    saveToHistory();
+  }, 1000);
 }
 
 // 更新预览内容
@@ -243,22 +279,14 @@ function updatePreview() {
     const html = marked.parse(currentContent);
     preview.innerHTML = html;
     
-    // 如果当前是全屏模式，同时更新全屏内容
-    if (isFullscreen) {
-      fullscreenContent.innerHTML = html;
-    }
-    
-    // 增强代码块（包括全屏内容中的）
+    // 增强代码块
     enhanceCodeBlocks();
     
-    // 渲染 Mermaid 图表（包括全屏内容中的）
+    // 渲染 Mermaid 图表
     renderMermaidDiagrams();
   } else {
     // 如果 marked 库未加载，显示纯文本
     preview.innerHTML = `<pre>${currentContent}</pre>`;
-    if (isFullscreen) {
-      fullscreenContent.innerHTML = `<pre>${currentContent}</pre>`;
-    }
   }
 }
 
@@ -427,7 +455,6 @@ async function handleNewFile() {
     const result = await invoke('new_file');
     currentContent = result;
     editor.value = currentContent;
-    filenameSpan.textContent = '未命名文档';
     updatePreview();
     updateWordCount();
     showStatus('已新建文档', 'success');
@@ -445,7 +472,6 @@ async function handleOpenFile() {
     const content = await invoke('open_file');
     currentContent = content;
     editor.value = currentContent;
-    filenameSpan.textContent = '已打开文件';
     updatePreview();
     updateWordCount();
     showStatus('文件打开成功', 'success');
@@ -463,8 +489,7 @@ async function handleSaveFile() {
   try {
     showStatus('正在保存文件...', 'info');
     const filePath = await invoke('save_file', { content: currentContent });
-    filenameSpan.textContent = `已保存: ${filePath.split('/').pop()}`;
-    showStatus('文件保存成功', 'success');
+    showStatus(`文件保存成功: ${filePath.split('/').pop()}`, 'success');
   } catch (error) {
     console.error('保存文件错误:', error);
     if (error !== '未选择保存路径') {
@@ -509,34 +534,6 @@ function toggleSyncScroll() {
   }
 }
 
-// 打开全屏预览
-function openFullscreen() {
-  isFullscreen = true;
-  fullscreenModal.classList.add('active');
-  
-  // 确保全屏内容与预览内容一致
-  if (typeof marked !== 'undefined') {
-    const html = marked.parse(currentContent);
-    fullscreenContent.innerHTML = html;
-    
-    // 增强全屏内容中的代码块
-    enhanceCodeBlocks();
-    
-    // 渲染全屏内容中的 Mermaid 图表
-    renderMermaidDiagrams();
-  } else {
-    fullscreenContent.innerHTML = `<pre>${currentContent}</pre>`;
-  }
-  
-  showStatus('已进入全屏预览模式', 'info');
-}
-
-// 关闭全屏预览
-function closeFullscreen() {
-  isFullscreen = false;
-  fullscreenModal.classList.remove('active');
-  showStatus('已退出全屏预览模式', 'info');
-}
 
 // 初始化主题
 function initTheme() {
@@ -623,23 +620,40 @@ function handleKeyboardShortcuts(e) {
     handleNewFile();
   }
   
-  // F11: 全屏预览
-  if (e.key === 'F11') {
-    e.preventDefault();
-    if (isFullscreen) {
-      closeFullscreen();
-    } else {
-      openFullscreen();
-    }
-  }
   
-  // Escape: 关闭全屏
-  if (e.key === 'Escape' && isFullscreen) {
-    closeFullscreen();
-  }
-  
-  // Ctrl/Cmd + Shift + S: 切换同步滚动
+  // Ctrl/Cmd + Shift + S: 另存为
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+    e.preventDefault();
+    handleSaveAsFile();
+  }
+  
+  // Ctrl/Cmd + Z: 撤销
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    handleUndo();
+  }
+  
+  // Ctrl/Cmd + Y 或 Ctrl/Cmd + Shift + Z: 重做
+  if (((e.ctrlKey || e.metaKey) && e.key === 'y') || 
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z')) {
+    e.preventDefault();
+    handleRedo();
+  }
+  
+  // Ctrl/Cmd + F: 查找
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    openFindReplaceModal();
+  }
+  
+  // Ctrl/Cmd + H: 替换
+  if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+    e.preventDefault();
+    openFindReplaceModal();
+  }
+  
+  // Ctrl/Cmd + Shift + R: 切换同步滚动
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
     e.preventDefault();
     toggleSyncScroll();
   }
@@ -679,6 +693,236 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+// 另存为文件
+async function handleSaveAsFile() {
+  console.log('另存为文件按钮被点击');
+  try {
+    showStatus('正在另存为文件...', 'info');
+    const filePath = await invoke('save_file', { content: currentContent });
+    showStatus(`文件另存为成功: ${filePath.split('/').pop()}`, 'success');
+  } catch (error) {
+    console.error('另存为文件错误:', error);
+    if (error !== '未选择保存路径') {
+      showStatus(`另存为文件失败: ${error}`, 'error');
+    }
+  }
+}
+
+// 撤销功能
+function handleUndo() {
+  if (historyIndex > 0) {
+    historyIndex--;
+    const content = history[historyIndex];
+    editor.value = content;
+    currentContent = content;
+    updatePreview();
+    updateWordCount();
+    showStatus('已撤销', 'info');
+  } else {
+    showStatus('没有可撤销的操作', 'info');
+  }
+}
+
+// 重做功能
+function handleRedo() {
+  if (historyIndex < history.length - 1) {
+    historyIndex++;
+    const content = history[historyIndex];
+    editor.value = content;
+    currentContent = content;
+    updatePreview();
+    updateWordCount();
+    showStatus('已重做', 'info');
+  } else {
+    showStatus('没有可重做的操作', 'info');
+  }
+}
+
+// 打开查找替换模态框
+function openFindReplaceModal() {
+  findReplaceModal.classList.add('active');
+  findInput.focus();
+  showStatus('查找替换模式', 'info');
+}
+
+// 关闭查找替换模态框
+function closeFindReplaceModal() {
+  findReplaceModal.classList.remove('active');
+  showStatus('已关闭查找替换', 'info');
+}
+
+// 查找下一个
+function handleFindNext() {
+  const searchText = findInput.value;
+  if (!searchText) {
+    showStatus('请输入要查找的文本', 'error');
+    return;
+  }
+  
+  const content = editor.value;
+  const caseSensitive = caseSensitiveCheck.checked;
+  const wholeWord = wholeWordCheck.checked;
+  
+  let searchPattern = searchText;
+  if (!caseSensitive) {
+    searchPattern = searchText.toLowerCase();
+  }
+  
+  if (wholeWord) {
+    searchPattern = `\\b${searchPattern}\\b`;
+  }
+  
+  const regex = new RegExp(searchPattern, caseSensitive ? 'g' : 'gi');
+  const matches = [...content.matchAll(regex)];
+  
+  if (matches.length === 0) {
+    showStatus('未找到匹配的文本', 'error');
+    return;
+  }
+  
+  currentSearchIndex = (currentSearchIndex + 1) % matches.length;
+  const match = matches[currentSearchIndex];
+  
+  // 选中匹配的文本
+  editor.focus();
+  editor.setSelectionRange(match.index, match.index + match[0].length);
+  
+  showStatus(`找到第 ${currentSearchIndex + 1} 个匹配项，共 ${matches.length} 个`, 'success');
+}
+
+// 替换当前
+function handleReplaceCurrent() {
+  const searchText = findInput.value;
+  const replaceText = replaceInput.value;
+  
+  if (!searchText) {
+    showStatus('请输入要查找的文本', 'error');
+    return;
+  }
+  
+  const selection = editor.selectionStart;
+  const content = editor.value;
+  const caseSensitive = caseSensitiveCheck.checked;
+  const wholeWord = wholeWordCheck.checked;
+  
+  let searchPattern = searchText;
+  if (!caseSensitive) {
+    searchPattern = searchText.toLowerCase();
+  }
+  
+  if (wholeWord) {
+    searchPattern = `\\b${searchPattern}\\b`;
+  }
+  
+  const regex = new RegExp(searchPattern, caseSensitive ? 'g' : 'gi');
+  const match = content.slice(selection).match(regex);
+  
+  if (match) {
+    const newContent = content.replace(regex, replaceText);
+    editor.value = newContent;
+    currentContent = newContent;
+    updatePreview();
+    updateWordCount();
+    showStatus('已替换当前匹配项', 'success');
+  } else {
+    showStatus('当前选择不匹配', 'error');
+  }
+}
+
+// 全部替换
+function handleReplaceAll() {
+  const searchText = findInput.value;
+  const replaceText = replaceInput.value;
+  
+  if (!searchText) {
+    showStatus('请输入要查找的文本', 'error');
+    return;
+  }
+  
+  const content = editor.value;
+  const caseSensitive = caseSensitiveCheck.checked;
+  const wholeWord = wholeWordCheck.checked;
+  
+  let searchPattern = searchText;
+  if (!caseSensitive) {
+    searchPattern = searchText.toLowerCase();
+  }
+  
+  if (wholeWord) {
+    searchPattern = `\\b${searchPattern}\\b`;
+  }
+  
+  const regex = new RegExp(searchPattern, caseSensitive ? 'g' : 'gi');
+  const matches = content.match(regex);
+  
+  if (!matches) {
+    showStatus('未找到匹配的文本', 'error');
+    return;
+  }
+  
+  const newContent = content.replace(regex, replaceText);
+  editor.value = newContent;
+  currentContent = newContent;
+  updatePreview();
+  updateWordCount();
+  showStatus(`已替换 ${matches.length} 个匹配项`, 'success');
+}
+
+// 导出为HTML
+function handleExport() {
+  if (typeof marked !== 'undefined') {
+    const html = marked.parse(currentContent);
+    const fullHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>导出的Markdown文档</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        h1, h2, h3, h4, h5, h6 { color: #333; margin-top: 1.5em; }
+        code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+    </style>
+</head>
+<body>
+${html}
+</body>
+</html>`;
+    
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'markdown-export.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showStatus('HTML文件已导出', 'success');
+  } else {
+    showStatus('Markdown解析库未加载', 'error');
+  }
+}
+
+// 保存历史记录
+function saveToHistory() {
+  const content = editor.value;
+  if (content !== currentContent) {
+    history = history.slice(0, historyIndex + 1);
+    history.push(content);
+    historyIndex = history.length - 1;
+    
+    // 限制历史记录数量
+    if (history.length > 50) {
+      history.shift();
+      historyIndex--;
+    }
+  }
+}
 
 // 页面加载完成后初始化应用
 window.addEventListener('DOMContentLoaded', () => {
