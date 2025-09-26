@@ -65,6 +65,40 @@ function init() {
   updateWordCount();
   initTheme();
   setupFullscreenTocScrollListener();
+  
+  // 应用初始 Prism.js 主题
+  const savedTheme = localStorage.getItem('markdown-editor-theme') || 'auto';
+  if (savedTheme === 'light') {
+    switchPrismTheme('light');
+  } else if (savedTheme === 'dark') {
+    switchPrismTheme('dark');
+  } else {
+    // auto 主题根据系统偏好决定
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    switchPrismTheme(prefersDark ? 'dark' : 'light');
+  }
+  
+  // 监听系统主题变化（仅当使用 auto 主题时）
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (currentTheme === 'auto') {
+      switchPrismTheme(e.matches ? 'dark' : 'light');
+      // 重新高亮代码块
+      setTimeout(() => {
+        enhanceCodeBlocks();
+      }, 100);
+    }
+  });
+  
+  // 检查 Prism.js 加载状态
+  setTimeout(() => {
+    if (typeof Prism !== 'undefined') {
+      console.log('Prism.js 已成功加载');
+      // 重新处理代码块
+      enhanceCodeBlocks();
+    } else {
+      console.error('Prism.js 加载失败');
+    }
+  }, 500);
 }
 
 // 设置事件监听器
@@ -186,10 +220,75 @@ function loadDefaultContent() {
 ![图片描述](https://example.com/image.jpg)
 \`\`\`
 
-### 代码块
+### 代码块示例
+
+#### JavaScript
 \`\`\`javascript
-function hello() {
-  console.log("Hello, World!");
+function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+const result = fibonacci(10);
+console.log(\`第10个斐波那契数: \${result}\`);
+\`\`\`
+
+#### Python
+\`\`\`python
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+result = fibonacci(10)
+print(f"第10个斐波那契数: {result}")
+\`\`\`
+
+#### Rust
+\`\`\`rust
+fn fibonacci(n: u32) -> u32 {
+    match n {
+        0 => 0,
+        1 => 1,
+        _ => fibonacci(n - 1) + fibonacci(n - 2),
+    }
+}
+
+fn main() {
+    let result = fibonacci(10);
+    println!("第10个斐波那契数: {}", result);
+}
+\`\`\`
+
+#### Java
+\`\`\`java
+public class Fibonacci {
+    public static int fibonacci(int n) {
+        if (n <= 1) return n;
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+    
+    public static void main(String[] args) {
+        int result = fibonacci(10);
+        System.out.println("第10个斐波那契数: " + result);
+    }
+}
+\`\`\`
+
+#### C++
+\`\`\`cpp
+#include <iostream>
+using namespace std;
+
+int fibonacci(int n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+int main() {
+    int result = fibonacci(10);
+    cout << "第10个斐波那契数: " << result << endl;
+    return 0;
 }
 \`\`\`
 
@@ -306,8 +405,10 @@ function updatePreview() {
       fullscreenContent.innerHTML = html;
     }
     
-    // 增强代码块
-    enhanceCodeBlocks();
+    // 延迟增强代码块，确保 Prism.js 完全加载
+    setTimeout(() => {
+      enhanceCodeBlocks();
+    }, 100);
     
     // 渲染 Mermaid 图表
     renderMermaidDiagrams();
@@ -382,8 +483,21 @@ function renderMermaidDiagrams() {
   }
 }
 
-// 增强代码块 - 简化版本，只添加语言标签和复制按钮
+// 增强代码块 - 使用 Prism.js 标准方式
 function enhanceCodeBlocks() {
+  // 等待 Prism.js 加载完成
+  if (typeof Prism === 'undefined') {
+    console.log('Prism.js 未加载，等待加载...');
+    setTimeout(enhanceCodeBlocks, 100);
+    return;
+  }
+  
+  console.log('Prism.js 已加载，开始处理代码块');
+  
+  // 使用 Prism.js 自动高亮所有代码块
+  Prism.highlightAll();
+  
+  // 为每个代码块添加额外功能
   const codeBlocks = document.querySelectorAll('pre code');
   
   codeBlocks.forEach((codeBlock) => {
@@ -397,22 +511,31 @@ function enhanceCodeBlocks() {
     // 保存原始文本内容
     const originalText = codeBlock.textContent;
     
-    // 添加语言标签
-    const language = codeBlock.className.match(/language-(\w+)/);
-    if (language) {
-      preElement.setAttribute('data-language', language[1]);
-    }
+    // 获取语言类型
+    const languageMatch = codeBlock.className.match(/language-(\w+)/);
+    const language = languageMatch ? languageMatch[1] : 'text';
+    
+    // 设置语言属性
+    preElement.setAttribute('data-language', language);
+    preElement.classList.add(`language-${language}`);
+    
+    // 暂时禁用行号显示
+    // if (originalText.split('\n').length > 1) {
+    //   preElement.classList.add('line-numbers');
+    // }
     
     // 添加复制按钮
     const copyBtn = document.createElement('button');
     copyBtn.className = 'copy-btn';
-    copyBtn.textContent = '复制';
+    copyBtn.innerHTML = '<span class="copy-icon">📋</span>复制';
     copyBtn.addEventListener('click', () => copyCode(originalText));
     preElement.appendChild(copyBtn);
     
     // 标记为已处理
     preElement.setAttribute('data-enhanced', 'true');
   });
+  
+  console.log('代码块处理完成');
 }
 
 // 复制代码功能
@@ -425,12 +548,7 @@ function copyCode(text) {
   });
 }
 
-// 简单的语法高亮 - 已禁用以避免样式错误
-function applySyntaxHighlighting(codeBlock) {
-  // 禁用所有语法高亮，直接显示原始文本
-  // 这样可以避免样式代码显示的问题
-  return;
-}
+// 旧的语法高亮函数已删除，现在使用 Prism.js
 
 // 更新字数统计
 function updateWordCount() {
@@ -568,6 +686,20 @@ function initTheme() {
   });
 }
 
+// 切换 Prism.js 主题
+function switchPrismTheme(theme) {
+  const lightTheme = document.getElementById('prism-theme-light');
+  const darkTheme = document.getElementById('prism-theme-dark');
+  
+  if (theme === 'light') {
+    lightTheme.disabled = false;
+    darkTheme.disabled = true;
+  } else if (theme === 'dark') {
+    lightTheme.disabled = true;
+    darkTheme.disabled = false;
+  }
+}
+
 // 应用主题
 function applyTheme(theme) {
   currentTheme = theme;
@@ -577,10 +709,21 @@ function applyTheme(theme) {
   
   if (theme === 'light') {
     document.documentElement.setAttribute('data-theme', 'light');
+    // 切换到浅色 Prism.js 主题
+    switchPrismTheme('light');
   } else if (theme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
+    // 切换到暗色 Prism.js 主题
+    switchPrismTheme('dark');
+  } else if (theme === 'auto') {
+    // auto 主题根据系统偏好决定
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (prefersDark) {
+      switchPrismTheme('dark');
+    } else {
+      switchPrismTheme('light');
+    }
   }
-  // auto 主题不需要设置 data-theme，使用系统默认
   
   // 保存主题设置
   localStorage.setItem('markdown-editor-theme', theme);
@@ -589,6 +732,11 @@ function applyTheme(theme) {
   setTimeout(() => {
     renderMermaidDiagrams();
   }, 100);
+  
+  // 重新高亮代码块以应用新主题
+  setTimeout(() => {
+    enhanceCodeBlocks();
+  }, 200);
 }
 
 // 处理主题切换

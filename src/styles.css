@@ -355,7 +355,7 @@ body {
 
 .fullscreen-content {
   flex: 1;
-  padding: 2rem;
+  padding: 1rem;
   overflow-y: auto;
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -1141,4 +1141,333 @@ body {
 
 .sync-indicator.show {
   opacity: 1;
+}
+
+/* 代码块基础样式 - 与 Prism.js 主题配合 */
+pre[class*="language-"] {
+  position: relative;
+  margin: 0.5rem 0;
+  padding: 0;
+  border-radius: 0.5rem;
+  overflow: visible;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  min-width: 200px;
+  width: 100%;
+  min-height: auto;
+  height: auto;
+  box-sizing: border-box;
+  display: block;
+  flex-shrink: 0;
+  /* 让 Prism.js 主题控制背景和颜色 */
+}
+
+code[class*="language-"] {
+  font-family: inherit;
+  font-size: inherit;
+  display: block;
+  white-space: pre;
+  width: 100%;
+  height: auto;
+  min-height: auto;
+  padding: 0.75rem;
+  margin: 0;
+  padding-left: 0.75rem;
+}
+
+/* 语言标签 - 只对有实际语言的代码块显示 */
+pre[class*="language-"]:not(.language-text)::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #6c757d;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* 复制按钮 */
+.copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #6c757d;
+  color: white;
+  border: 1px solid #6c757d;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  z-index: 2;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
+/* 当有语言标签时，调整复制按钮位置 */
+pre[class*="language-"]:not(.language-text) .copy-btn {
+  right: 4.5rem;
+}
+
+.copy-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.copy-icon {
+  margin-right: 0.25rem;
+}
+
+/* 行号样式 - 简化版本 */
+.line-numbers {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2.5rem;
+  min-height: 100%;
+  height: auto;
+  background: #f1f3f4;
+  border-right: 1px solid #e9ecef;
+  padding: 0.75rem 0.25rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #6c757d;
+  user-select: none;
+  z-index: 0;
+  box-sizing: border-box;
+}
+
+.line-numbers .line-number {
+  display: block;
+  text-align: right;
+  padding-right: 0.5rem;
+}
+
+/* 当有行号时调整代码块内边距 */
+pre[class*="language-"].line-numbers {
+  padding-left: 0;
+}
+
+pre[class*="language-"].line-numbers code[class*="language-"] {
+  padding-left: 3rem;
+}
+
+/* 主题适配 - 浅色主题 */
+
+[data-theme="light"] .line-numbers {
+  background: #f1f3f4;
+  border-right-color: #e9ecef;
+  color: #6c757d;
+}
+
+[data-theme="light"] .copy-btn {
+  background: #6c757d;
+  border-color: #6c757d;
+  color: white;
+}
+
+[data-theme="light"] .copy-btn:hover {
+  background: #5a6268;
+  border-color: #5a6268;
+}
+
+[data-theme="light"] pre[class*="language-"]:not(.language-text)::before {
+  background: #6c757d;
+  color: white;
+}
+
+/* 主题适配 - 暗色主题 */
+
+[data-theme="dark"] .line-numbers {
+  background: #2d2d2d;
+  border-right-color: #333;
+  color: #888;
+}
+
+[data-theme="dark"] .copy-btn {
+  background: #495057;
+  border-color: #495057;
+  color: white;
+}
+
+[data-theme="dark"] .copy-btn:hover {
+  background: #343a40;
+  border-color: #343a40;
+}
+
+[data-theme="dark"] pre[class*="language-"]:not(.language-text)::before {
+  background: #495057;
+  color: white;
+}
+
+/* 全屏模式下的代码块样式 - 与普通预览模式保持一致 */
+.fullscreen-content pre[class*="language-"] {
+  position: relative;
+  margin: 0.5rem 0;
+  padding: 0;
+  border-radius: 0.5rem;
+  overflow: visible;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-width: 200px;
+  width: 100%;
+  max-width: none;
+  min-width: auto;
+  height: auto;
+  box-sizing: border-box;
+  display: block;
+  flex-shrink: 0;
+  /* 让 Prism.js 主题控制背景和颜色 */
+}
+
+.fullscreen-content code[class*="language-"] {
+  font-family: inherit;
+  font-size: inherit;
+  display: block;
+  white-space: pre;
+  width: 100%;
+  height: auto;
+  min-height: auto;
+  padding: 0.75rem;
+  margin: 0;
+  padding-left: 0.75rem;
+}
+
+.fullscreen-content .line-numbers {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2.5rem;
+  min-height: 100%;
+  height: auto;
+  background: #f1f3f4;
+  border-right: 1px solid #e9ecef;
+  padding: 0.75rem 0.25rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #6c757d;
+  user-select: none;
+  z-index: 0;
+  box-sizing: border-box;
+}
+
+.fullscreen-content .line-numbers .line-number {
+  display: block;
+  text-align: right;
+  padding-right: 0.5rem;
+}
+
+.fullscreen-content pre[class*="language-"].line-numbers {
+  padding-left: 0;
+}
+
+.fullscreen-content pre[class*="language-"].line-numbers code[class*="language-"] {
+  padding-left: 3rem;
+}
+
+/* 全屏模式下的语言标签样式 */
+.fullscreen-content pre[class*="language-"]:not(.language-text)::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #6c757d;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* 全屏模式下的复制按钮样式 */
+.fullscreen-content .copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #6c757d;
+  color: white;
+  border: 1px solid #6c757d;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  z-index: 2;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
+.fullscreen-content pre[class*="language-"]:not(.language-text) .copy-btn {
+  right: 4.5rem;
+}
+
+.fullscreen-content .copy-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.fullscreen-content .copy-icon {
+  margin-right: 0.25rem;
+}
+
+/* 全屏模式下的主题适配 - 只控制辅助元素，不覆盖 Prism.js 主题 */
+[data-theme="light"] .fullscreen-content .line-numbers {
+  background: #f1f3f4;
+  border-right-color: #e9ecef;
+  color: #6c757d;
+}
+
+[data-theme="light"] .fullscreen-content .copy-btn {
+  background: #6c757d;
+  border-color: #6c757d;
+  color: white;
+}
+
+[data-theme="light"] .fullscreen-content .copy-btn:hover {
+  background: #5a6268;
+  border-color: #5a6268;
+}
+
+[data-theme="light"] .fullscreen-content pre[class*="language-"]:not(.language-text)::before {
+  background: #6c757d;
+  color: white;
+}
+
+[data-theme="dark"] .fullscreen-content .line-numbers {
+  background: #2d2d2d;
+  border-right-color: #333;
+  color: #888;
+}
+
+[data-theme="dark"] .fullscreen-content .copy-btn {
+  background: #495057;
+  border-color: #495057;
+  color: white;
+}
+
+[data-theme="dark"] .fullscreen-content .copy-btn:hover {
+  background: #343a40;
+  border-color: #343a40;
+}
+
+[data-theme="dark"] .fullscreen-content pre[class*="language-"]:not(.language-text)::before {
+  background: #495057;
+  color: white;
 }
