@@ -12,6 +12,51 @@
     <link id="prism-theme-dark" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+      // 全局标志，用于跟踪是否已通过文件关联加载内容
+      window.hasFileAssociationContent = false;
+      
+      // 等待 Tauri API 加载
+      window.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM 加载完成，检查 Tauri API...');
+        
+        // 检查 Tauri API 是否已经可用
+        if (window.__TAURI__) {
+          console.log('Tauri API 已可用');
+          console.log('可用的方法:', Object.keys(window.__TAURI__));
+          
+          // 立即设置文件关联监听器
+          setupEarlyFileAssociationListener();
+        } else {
+          console.log('等待 Tauri API 加载...');
+          
+          // 等待 Tauri API 加载
+          const checkTauri = () => {
+            if (window.__TAURI__) {
+              console.log('Tauri API 加载完成');
+              console.log('可用的方法:', Object.keys(window.__TAURI__));
+              
+              // 立即设置文件关联监听器
+              setupEarlyFileAssociationListener();
+            } else {
+              setTimeout(checkTauri, 50);
+            }
+          };
+          
+          setTimeout(checkTauri, 50);
+        }
+      });
+      
+      // 早期文件关联监听器
+      function setupEarlyFileAssociationListener() {
+        if (window.__TAURI__ && window.__TAURI__.event) {
+          window.__TAURI__.event.listen('open-file', (event) => {
+            console.log('收到早期文件关联事件:', event.payload);
+            window.hasFileAssociationContent = true;
+          });
+        }
+      }
+    </script>
     <script type="module" src="/main.js" defer></script>
   </head>
 
@@ -22,10 +67,23 @@
         <!-- 左侧：文件操作 -->
         <div class="toolbar-section toolbar-left">
           <div class="toolbar-group">
-            <button id="new-btn" class="btn btn-primary" title="新建文档 (Ctrl+N)">
-              <span class="icon">📄</span>
-              新建
-            </button>
+            <div class="dropdown">
+              <button id="new-btn" class="btn btn-primary dropdown-toggle" title="新建文档 (Ctrl+N)">
+                <span class="icon">📄</span>
+                新建
+                <span class="dropdown-arrow">▼</span>
+              </button>
+              <div class="dropdown-menu">
+                <a href="#" id="new-blank" class="dropdown-item">
+                  <span class="icon">📄</span>
+                  创建空白文档
+                </a>
+                <a href="#" id="new-template" class="dropdown-item">
+                  <span class="icon">📋</span>
+                  使用欢迎模板
+                </a>
+              </div>
+            </div>
             <button id="open-btn" class="btn" title="打开文件 (Ctrl+O)">
               <span class="icon">📂</span>
               打开
@@ -94,7 +152,7 @@
       <main class="main-content">
         <!-- 编辑器区域 -->
         <div id="editor-panel" class="panel editor-panel">
-          <textarea id="markdown-editor" class="editor" placeholder="开始编写你的 Markdown 内容..."></textarea>
+          <textarea id="markdown-editor" class="editor" placeholder="正在加载..."></textarea>
         </div>
 
         <!-- 预览区域 -->

@@ -56,13 +56,12 @@ let currentSearchIndex = -1; // 当前搜索索引
 let searchResults = []; // 搜索结果
 let isFullscreen = false; // 是否全屏模式
 let fullscreenTocItems = []; // 全屏目录项列表
+let hasFileAssociationContent = false; // 是否已通过文件关联加载内容
+let defaultContentTimer = null; // 默认内容加载定时器
 
 // 初始化应用
 function init() {
   setupEventListeners();
-  loadDefaultContent();
-  updatePreview();
-  updateWordCount();
   initTheme();
   setupFullscreenTocScrollListener();
   
@@ -99,15 +98,137 @@ function init() {
       console.error('Prism.js 加载失败');
     }
   }, 500);
+  
+  // 监听文件关联事件
+  setupFileAssociationListener();
+  
+  // 延迟加载默认内容，等待文件关联事件
+  defaultContentTimer = setTimeout(() => {
+    // 检查全局标志和本地标志
+    const hasFileContent = window.hasFileAssociationContent || hasFileAssociationContent;
+    
+    // 如果没有通过文件关联加载内容，则加载默认内容
+    if (!hasFileContent) {
+      loadDefaultContent();
+      updatePreview();
+      updateWordCount();
+    }
+  }, 2000); // 等待2000ms，给文件关联事件足够时间
+  
+  // 开发模式下添加测试按钮
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  }
 }
+
+// 设置文件关联监听器
+function setupFileAssociationListener() {
+  
+  // 立即检查 Tauri API 是否已加载
+  if (window.__TAURI__) {
+    setupFileAssociationEvent();
+  } else {
+    // 等待 Tauri API 加载
+    const checkTauriAPI = () => {
+      if (window.__TAURI__) {
+        setupFileAssociationEvent();
+      } else {
+        setTimeout(checkTauriAPI, 50); // 更频繁地检查
+      }
+    };
+    checkTauriAPI();
+  }
+}
+
+// 设置文件关联事件监听
+function setupFileAssociationEvent() {
+  window.__TAURI__.event.listen('open-file', (event) => {
+    const filePath = event.payload;
+    
+    if (!filePath) {
+      return;
+    }
+    
+    // 立即取消默认内容加载定时器
+    if (defaultContentTimer) {
+      clearTimeout(defaultContentTimer);
+      defaultContentTimer = null;
+    }
+    
+    // 更新全局标志
+    window.hasFileAssociationContent = true;
+    
+    // 检查 invoke 方法是否存在 - 在 Tauri 2.0 中，invoke 位于 core 模块中
+    let invokeFunction = null;
+    if (window.__TAURI__.core && window.__TAURI__.core.invoke) {
+      invokeFunction = window.__TAURI__.core.invoke;
+    } else if (window.__TAURI__.invoke) {
+      invokeFunction = window.__TAURI__.invoke;
+    }
+    
+    if (!invokeFunction) {
+      return;
+    }
+    
+    // 调用 Tauri 命令打开文件
+    invokeFunction('open_file_by_path', { filePath })
+      .then((content) => {
+        // 更新编辑器内容
+        if (editor) {
+          editor.value = content;
+          
+          // 更新占位符
+          editor.placeholder = '开始编写你的 Markdown 内容...';
+          
+          // 标记已通过文件关联加载内容
+          hasFileAssociationContent = true;
+          
+          // 触发 input 事件以确保预览更新
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+          
+          updatePreview();
+          updateWordCount();
+          
+          // 更新窗口标题
+          const fileName = filePath.split('/').pop() || filePath.split('\\').pop();
+          document.title = `Markdown Editor - ${fileName}`;
+          
+          // 将光标移到开头，避免滚动到末尾
+          editor.setSelectionRange(0, 0);
+          editor.focus();
+        }
+      })
+      .catch((error) => {
+        console.error('打开文件失败:', error);
+      });
+  });
+}
+
 
 // 设置事件监听器
 function setupEventListeners() {
-  console.log('设置事件监听器...');
   
   try {
-    // 文件操作按钮
-    newBtn.addEventListener('click', handleNewFile);
+    // 文件操作按钮 - 新建按钮改为下拉菜单
+    newBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // 下拉菜单通过CSS hover显示，不需要点击处理
+    });
+    
+    // 新建空白文档
+    document.getElementById('new-blank').addEventListener('click', (e) => {
+      e.preventDefault();
+      createBlankDocument();
+      updateWordCount();
+      showStatus('已创建空白文档', 'success');
+    });
+    
+    // 新建欢迎模板
+    document.getElementById('new-template').addEventListener('click', (e) => {
+      e.preventDefault();
+      loadWelcomeTemplate();
+      updateWordCount();
+      showStatus('已创建欢迎模板', 'success');
+    });
     openBtn.addEventListener('click', handleOpenFile);
     saveBtn.addEventListener('click', handleSaveFile);
     saveAsBtn.addEventListener('click', handleSaveAsFile);
@@ -176,7 +297,42 @@ function setupEventListeners() {
 
 // 加载默认内容
 function loadDefaultContent() {
-  currentContent = `# 欢迎使用 Markdown 编辑器
+  // 更新占位符
+  editor.placeholder = '开始编写你的 Markdown 内容...';
+  
+  currentContent = `# 新建文档
+
+开始编写你的 Markdown 文档...
+
+## 基本语法
+
+- **粗体文本**
+- *斜体文本*
+- \`代码文本\`
+
+### 列表
+- 项目 1
+- 项目 2
+- 项目 3
+
+### 链接
+[链接文本](https://example.com)
+
+### 代码块
+\`\`\`javascript
+console.log('Hello, World!');
+\`\`\`
+
+---
+开始编写你的 Markdown 文档吧！`;
+  
+  editor.value = currentContent;
+  updatePreview();
+}
+
+// 加载欢迎模板
+function loadWelcomeTemplate() {
+  currentContent = `# Markdown 编辑器
 
 这是一个功能完整的 Markdown 编辑和预览工具。
 
@@ -275,91 +431,6 @@ public class Fibonacci {
 }
 \`\`\`
 
-#### C++
-\`\`\`cpp
-#include <iostream>
-using namespace std;
-
-int fibonacci(int n) {
-    if (n <= 1) return n;
-    return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-int main() {
-    int result = fibonacci(10);
-    cout << "第10个斐波那契数: " << result << endl;
-    return 0;
-}
-\`\`\`
-
-### Mermaid 图表
-\`\`\`mermaid
-graph TB
-    A[开始] --> B{条件判断}
-    B -->|是| C[执行操作A]
-    B -->|否| D[执行操作B]
-    C --> E[结束]
-    D --> E
-\`\`\`
-
-### Android Init 语法示例
-\`\`\`bash
-# Android Init 使用自定义的配置语言，支持以下语法元素：
-
-# 1. Actions (动作)
-on <trigger> [&& <trigger>]*
-    <command>
-    <command>
-    ...
-
-# 2. Services (服务)
-service <name> <pathname> [<argument>]*
-    <option>
-    <option>
-    ...
-
-# 3. Imports (导入)
-import <path>
-
-# 示例配置
-on early-init
-    start ueventd
-
-service ueventd /sbin/ueventd
-    class core
-    critical
-    seclabel u:r:ueventd:s0
-\`\`\`
-
-### Bash 脚本示例
-\`\`\`bash
-#!/bin/bash
-
-# 这是一个示例脚本
-function check_service() {
-    local service_name=$1
-    
-    if systemctl is-active --quiet $service_name; then
-        echo "服务 $service_name 正在运行"
-        return 0
-    else
-        echo "服务 $service_name 未运行"
-        return 1
-    fi
-}
-
-# 检查多个服务
-services=("nginx" "mysql" "redis")
-
-for service in "\${services[@]}"; do
-    check_service $service || echo "警告: $service 服务异常"
-done
-
-# 使用管道和重定向
-echo "系统信息:" | tee /tmp/system_info.log
-uname -a >> /tmp/system_info.log 2>&1
-\`\`\`
-
 ### 表格
 \`\`\`
 | 列1 | 列2 | 列3 |
@@ -373,10 +444,29 @@ uname -a >> /tmp/system_info.log 2>&1
 > 可以包含多行内容
 \`\`\`
 
+### 分割线
+\`\`\`
 ---
+\`\`\`
 
-开始编写你的 Markdown 文档吧！`;
+## 开始使用
+
+现在你可以开始编写你的 Markdown 文档了！
+
+1. 在左侧编辑器中输入 Markdown 语法
+2. 右侧会实时显示预览效果
+3. 使用工具栏按钮进行文件操作
+4. 按 F11 进入全屏预览模式
+
+祝你使用愉快！ 🎉`;
   
+  editor.value = currentContent;
+  updatePreview();
+}
+
+// 创建空白文档
+function createBlankDocument() {
+  currentContent = '';
   editor.value = currentContent;
   updatePreview();
 }
@@ -602,20 +692,6 @@ function syncScroll(sourceElement, targetElement, sourceType) {
 }
 
 // 处理新建文件
-async function handleNewFile() {
-  console.log('新建文件按钮被点击');
-  try {
-    const result = await invoke('new_file');
-    currentContent = result;
-    editor.value = currentContent;
-    updatePreview();
-    updateWordCount();
-    showStatus('已新建文档', 'success');
-  } catch (error) {
-    console.error('新建文件错误:', error);
-    showStatus(`新建文件失败: ${error}`, 'error');
-  }
-}
 
 // 处理打开文件
 async function handleOpenFile() {
