@@ -455,7 +455,7 @@ sequenceDiagram
                     });
                 });
             }
-        } else {
+    } else {
             // 退出全屏模式
             editorContainer.style.display = 'flex';
             previewContainer.style.flex = '1';
@@ -499,10 +499,10 @@ sequenceDiagram
                 // 模拟打开文件
                 const content = prompt('请输入文件内容（模拟打开文件）:');
                 if (content !== null) {
-                    editor.value = content;
+    editor.value = content;
                     currentFile = '模拟文件.md';
                     hasUnsavedChanges = false;
-                    updatePreview();
+    updatePreview();
                     updateTitle();
                     
                     // 将光标移到文件开头
@@ -516,10 +516,10 @@ sequenceDiagram
             // 如果Tauri API失败，使用模拟功能
             const content = prompt('Tauri API失败，请输入文件内容（模拟打开文件）:');
             if (content !== null) {
-                editor.value = content;
+    editor.value = content;
                 currentFile = '模拟文件.md';
                 hasUnsavedChanges = false;
-                updatePreview();
+    updatePreview();
                 updateTitle();
                 
                 // 将光标移到文件开头
@@ -534,18 +534,19 @@ sequenceDiagram
     window.openFileByPath = async function(filePath) {
         console.log('openFileByPath被调用，文件路径:', filePath);
         try {
-            if (window.__TAURI__ && window.__TAURI__.invoke) {
-                console.log('使用Tauri invoke API通过Rust后端读取文件...');
+            if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                console.log('使用Tauri core.invoke API通过Rust后端读取文件...');
                 // 使用Rust后端的open_file_by_path函数
-                const content = await window.__TAURI__.invoke('open_file_by_path', { filePath: filePath });
+                const { invoke } = window.__TAURI__.core;
+                const content = await invoke('open_file_by_path', { filePath: filePath });
                 console.log('文件读取成功，内容长度:', content.length);
                 
                 // 检查编辑器元素
                 const editor = document.getElementById('markdown-editor');
                 if (!editor) {
                     console.error('编辑器元素未找到！');
-                    return;
-                }
+    return;
+  }
                 console.log('编辑器元素找到，设置内容...');
                 
                 editor.value = content;
@@ -563,7 +564,7 @@ sequenceDiagram
                 
                 console.log('文件打开成功:', filePath);
             } else {
-                console.log('Tauri invoke API不可用，使用模拟功能');
+                console.log('Tauri core.invoke API不可用，使用模拟功能');
                 const content = prompt('请输入文件内容（模拟打开文件）:');
                 if (content !== null) {
                     const editor = document.getElementById('markdown-editor');
@@ -594,7 +595,7 @@ sequenceDiagram
                     if (window.updateTitle) window.updateTitle();
                     
                     // 将光标移到文件开头
-                    editor.focus();
+  editor.focus();
                     editor.setSelectionRange(0, 0);
                     editor.scrollTop = 0;
                 }
