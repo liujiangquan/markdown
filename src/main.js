@@ -1,308 +1,23 @@
-const { invoke } = window.__TAURI__.core;
+// 文件关联标志（全局变量）
+let hasFileAssociationContent = false;
 
-// DOM 元素
+// Markdown编辑器主应用
+document.addEventListener('DOMContentLoaded', () => {
 const editor = document.getElementById('markdown-editor');
-const preview = document.getElementById('preview-content');
-const statusText = document.getElementById('status-text');
-const wordCountSpan = document.getElementById('word-count');
-
-// 按钮元素
-const newBtn = document.getElementById('new-btn');
-const openBtn = document.getElementById('open-btn');
-const saveBtn = document.getElementById('save-btn');
-const saveAsBtn = document.getElementById('save-as-btn');
-const undoBtn = document.getElementById('undo-btn');
-const redoBtn = document.getElementById('redo-btn');
-const findBtn = document.getElementById('find-btn');
-const replaceBtn = document.getElementById('replace-btn');
-const syncScrollBtn = document.getElementById('sync-scroll-btn');
-const exportBtn = document.getElementById('export-btn');
-const themeSelector = document.getElementById('theme-selector');
-
-// 模态框元素
-const findReplaceModal = document.getElementById('find-replace-modal');
-const closeModalBtn = document.getElementById('close-modal');
-const closeModalBtn2 = document.getElementById('close-modal-btn');
-const findInput = document.getElementById('find-input');
-const replaceInput = document.getElementById('replace-input');
-const caseSensitiveCheck = document.getElementById('case-sensitive');
-const wholeWordCheck = document.getElementById('whole-word');
-const findNextBtn = document.getElementById('find-next');
-const replaceCurrentBtn = document.getElementById('replace-current');
-const replaceAllBtn = document.getElementById('replace-all');
-
-// 面板元素
-const editorPanel = document.getElementById('editor-panel');
-const previewPanel = document.getElementById('preview-panel');
-
-// 全屏预览元素
-const fullscreenModal = document.getElementById('fullscreen-modal');
-const fullscreenContent = document.getElementById('fullscreen-content');
-const closeFullscreenBtn = document.getElementById('close-fullscreen');
-const fullscreenBtn = document.getElementById('fullscreen-btn');
-
-// 全屏目录元素
-const fullscreenTocPanel = document.getElementById('fullscreen-toc-panel');
-const fullscreenTocContent = document.getElementById('fullscreen-toc-content');
-
-// 状态变量
-let currentContent = '';
-let isScrolling = false; // 防止循环滚动
-let syncScrollEnabled = true; // 同步滚动开关
-let currentTheme = 'auto'; // 当前主题
-let history = []; // 撤销重做历史
-let historyIndex = -1; // 当前历史索引
-let currentSearchIndex = -1; // 当前搜索索引
-let searchResults = []; // 搜索结果
-let isFullscreen = false; // 是否全屏模式
-let fullscreenTocItems = []; // 全屏目录项列表
-let hasFileAssociationContent = false; // 是否已通过文件关联加载内容
-let defaultContentTimer = null; // 默认内容加载定时器
-
-// 初始化应用
-function init() {
-  setupEventListeners();
-  initTheme();
-  setupFullscreenTocScrollListener();
-  
-  // 应用初始 Prism.js 主题
-  const savedTheme = localStorage.getItem('markdown-editor-theme') || 'auto';
-  if (savedTheme === 'light') {
-    switchPrismTheme('light');
-  } else if (savedTheme === 'dark') {
-    switchPrismTheme('dark');
-  } else {
-    // auto 主题根据系统偏好决定
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    switchPrismTheme(prefersDark ? 'dark' : 'light');
-  }
-  
-  // 监听系统主题变化（仅当使用 auto 主题时）
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    if (currentTheme === 'auto') {
-      switchPrismTheme(e.matches ? 'dark' : 'light');
-      // 重新高亮代码块
-      setTimeout(() => {
-        enhanceCodeBlocks();
-      }, 100);
-    }
-  });
-  
-  // 检查 Prism.js 加载状态
-  setTimeout(() => {
-    if (typeof Prism !== 'undefined') {
-      console.log('Prism.js 已成功加载');
-      // 重新处理代码块
-      enhanceCodeBlocks();
-    } else {
-      console.error('Prism.js 加载失败');
-    }
-  }, 500);
-  
-  // 监听文件关联事件
-  setupFileAssociationListener();
-  
-  // 延迟加载默认内容，等待文件关联事件
-  defaultContentTimer = setTimeout(() => {
-    // 检查全局标志和本地标志
-    const hasFileContent = window.hasFileAssociationContent || hasFileAssociationContent;
+    const preview = document.getElementById('markdown-preview');
     
-    // 如果没有通过文件关联加载内容，则加载默认内容
-    if (!hasFileContent) {
-      loadDefaultContent();
-      updatePreview();
-      updateWordCount();
-    }
-  }, 2000); // 等待2000ms，给文件关联事件足够时间
-  
-  // 开发模式下添加测试按钮
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-  }
-}
-
-// 设置文件关联监听器
-function setupFileAssociationListener() {
-  
-  // 立即检查 Tauri API 是否已加载
-  if (window.__TAURI__) {
-    setupFileAssociationEvent();
-  } else {
-    // 等待 Tauri API 加载
-    const checkTauriAPI = () => {
-      if (window.__TAURI__) {
-        setupFileAssociationEvent();
-      } else {
-        setTimeout(checkTauriAPI, 50); // 更频繁地检查
-      }
-    };
-    checkTauriAPI();
-  }
-}
-
-// 设置文件关联事件监听
-function setupFileAssociationEvent() {
-  window.__TAURI__.event.listen('open-file', (event) => {
-    const filePath = event.payload;
-    
-    if (!filePath) {
-      return;
+    if (!editor || !preview) {
+        console.error('编辑器或预览元素未找到');
+        return;
     }
     
-    // 立即取消默认内容加载定时器
-    if (defaultContentTimer) {
-      clearTimeout(defaultContentTimer);
-      defaultContentTimer = null;
-    }
+    // 默认内容（空白文档）
+    const defaultContent = '';
     
-    // 更新全局标志
-    window.hasFileAssociationContent = true;
-    
-    // 检查 invoke 方法是否存在 - 在 Tauri 2.0 中，invoke 位于 core 模块中
-    let invokeFunction = null;
-    if (window.__TAURI__.core && window.__TAURI__.core.invoke) {
-      invokeFunction = window.__TAURI__.core.invoke;
-    } else if (window.__TAURI__.invoke) {
-      invokeFunction = window.__TAURI__.invoke;
-    }
-    
-    if (!invokeFunction) {
-      return;
-    }
-    
-    // 调用 Tauri 命令打开文件
-    invokeFunction('open_file_by_path', { filePath })
-      .then((content) => {
-        // 更新编辑器内容
-        if (editor) {
-          editor.value = content;
-          
-          // 更新占位符
-          editor.placeholder = '开始编写你的 Markdown 内容...';
-          
-          // 标记已通过文件关联加载内容
-          hasFileAssociationContent = true;
-          
-          // 触发 input 事件以确保预览更新
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
-          
-          updatePreview();
-          updateWordCount();
-          
-          // 更新窗口标题
-          const fileName = filePath.split('/').pop() || filePath.split('\\').pop();
-          document.title = `Markdown Editor - ${fileName}`;
-          
-          // 将光标移到开头，避免滚动到末尾
-          editor.setSelectionRange(0, 0);
-          editor.focus();
-        }
-      })
-      .catch((error) => {
-        console.error('打开文件失败:', error);
-      });
-  });
-}
+    // 欢迎模板内容
+    const welcomeTemplate = `# Markdown 编辑器
 
-
-// 设置事件监听器
-function setupEventListeners() {
-  
-  try {
-    // 文件操作按钮 - 新建按钮改为下拉菜单
-    newBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      // 下拉菜单通过CSS hover显示，不需要点击处理
-    });
-    
-    // 新建空白文档
-    document.getElementById('new-blank').addEventListener('click', (e) => {
-      e.preventDefault();
-      createBlankDocument();
-      updateWordCount();
-      showStatus('已创建空白文档', 'success');
-    });
-    
-    // 新建欢迎模板
-    document.getElementById('new-template').addEventListener('click', (e) => {
-      e.preventDefault();
-      loadWelcomeTemplate();
-      updateWordCount();
-      showStatus('已创建欢迎模板', 'success');
-    });
-    openBtn.addEventListener('click', handleOpenFile);
-    saveBtn.addEventListener('click', handleSaveFile);
-    saveAsBtn.addEventListener('click', handleSaveAsFile);
-    console.log('文件操作按钮事件监听器已设置');
-    
-    // 编辑功能按钮
-    undoBtn.addEventListener('click', handleUndo);
-    redoBtn.addEventListener('click', handleRedo);
-    findBtn.addEventListener('click', openFindReplaceModal);
-    replaceBtn.addEventListener('click', openFindReplaceModal);
-    exportBtn.addEventListener('click', handleExport);
-    console.log('编辑功能按钮事件监听器已设置');
-    
-    // 预览相关按钮
-    syncScrollBtn.addEventListener('click', toggleSyncScroll);
-    console.log('预览相关按钮事件监听器已设置');
-    
-    // 编辑器内容变化
-    editor.addEventListener('input', handleEditorChange);
-    console.log('编辑器事件监听器已设置');
-    
-    // 同步滚动事件
-    editor.addEventListener('scroll', handleEditorScroll);
-    preview.addEventListener('scroll', handlePreviewScroll);
-    console.log('同步滚动事件监听器已设置');
-    
-    // 键盘快捷键
-    document.addEventListener('keydown', handleKeyboardShortcuts);
-    console.log('键盘快捷键事件监听器已设置');
-    
-    
-    // 主题切换
-    themeSelector.addEventListener('change', handleThemeChange);
-    console.log('主题切换事件监听器已设置');
-    
-    // 全屏预览按钮
-    fullscreenBtn.addEventListener('click', openFullscreen);
-    closeFullscreenBtn.addEventListener('click', closeFullscreen);
-    console.log('全屏预览按钮事件监听器已设置');
-    
-    // 模态框事件
-    closeModalBtn.addEventListener('click', closeFindReplaceModal);
-    closeModalBtn2.addEventListener('click', closeFindReplaceModal);
-    findReplaceModal.addEventListener('click', (e) => {
-      if (e.target === findReplaceModal) {
-        closeFindReplaceModal();
-      }
-    });
-    
-    // 全屏模态框点击外部关闭
-    fullscreenModal.addEventListener('click', (e) => {
-      if (e.target === fullscreenModal) {
-        closeFullscreen();
-      }
-    });
-    findNextBtn.addEventListener('click', handleFindNext);
-    replaceCurrentBtn.addEventListener('click', handleReplaceCurrent);
-    replaceAllBtn.addEventListener('click', handleReplaceAll);
-    console.log('模态框事件监听器已设置');
-    
-    console.log('所有事件监听器设置完成');
-  } catch (error) {
-    console.error('设置事件监听器时出错:', error);
-  }
-}
-
-// 加载默认内容
-function loadDefaultContent() {
-  // 更新占位符
-  editor.placeholder = '开始编写你的 Markdown 内容...';
-  
-  currentContent = `# 新建文档
-
-开始编写你的 Markdown 文档...
+欢迎使用 Markdown 编辑器！
 
 ## 基本语法
 
@@ -318,1046 +33,1047 @@ function loadDefaultContent() {
 ### 链接
 [链接文本](https://example.com)
 
-### 代码块
-\`\`\`javascript
-console.log('Hello, World!');
-\`\`\`
-
----
-开始编写你的 Markdown 文档吧！`;
-  
-  editor.value = currentContent;
-  updatePreview();
-}
-
-// 加载欢迎模板
-function loadWelcomeTemplate() {
-  currentContent = `# Markdown 编辑器
-
-这是一个功能完整的 Markdown 编辑和预览工具。
-
-## 主要功能
-
-- ✨ **实时预览** - 编辑时实时显示预览效果
-- 📁 **文件操作** - 支持打开、保存、新建文件
-- 🔍 **全屏预览** - 支持全屏模式查看文档
-- 📱 **响应式设计** - 适配不同屏幕尺寸
-- 🎨 **现代界面** - 简洁美观的用户界面
-
-## 支持的 Markdown 语法
-
-### 标题
-\`\`\`
-# 一级标题
-## 二级标题
-### 三级标题
-\`\`\`
-
-### 文本格式
-\`\`\`
-**粗体文本**
-*斜体文本*
-\`代码文本\`
-\`\`\`
-
-### 列表
-\`\`\`
-- 无序列表项 1
-- 无序列表项 2
-  - 嵌套列表项
-
-1. 有序列表项 1
-2. 有序列表项 2
-\`\`\`
-
-### 链接和图片
-\`\`\`
-[链接文本](https://example.com)
-![图片描述](https://example.com/image.jpg)
-\`\`\`
-
 ### 代码块示例
 
-#### JavaScript
 \`\`\`javascript
-function fibonacci(n) {
-  if (n <= 1) return n;
-  return fibonacci(n - 1) + fibonacci(n - 2);
+function greet(name) {
+    console.log(\`Hello, \${name}!\`);
 }
-
-const result = fibonacci(10);
-console.log(\`第10个斐波那契数: \${result}\`);
+greet('World');
 \`\`\`
 
-#### Python
 \`\`\`python
 def fibonacci(n):
     if n <= 1:
         return n
     return fibonacci(n - 1) + fibonacci(n - 2)
 
-result = fibonacci(10)
-print(f"第10个斐波那契数: {result}")
+print(fibonacci(10))
 \`\`\`
 
-#### Rust
-\`\`\`rust
-fn fibonacci(n: u32) -> u32 {
-    match n {
-        0 => 0,
-        1 => 1,
-        _ => fibonacci(n - 1) + fibonacci(n - 2),
-    }
-}
-
-fn main() {
-    let result = fibonacci(10);
-    println!("第10个斐波那契数: {}", result);
-}
-\`\`\`
-
-#### Java
 \`\`\`java
-public class Fibonacci {
-    public static int fibonacci(int n) {
-        if (n <= 1) return n;
-        return fibonacci(n - 1) + fibonacci(n - 2);
-    }
-    
+public class HelloWorld {
     public static void main(String[] args) {
-        int result = fibonacci(10);
-        System.out.println("第10个斐波那契数: " + result);
+        System.out.println("Hello, World!");
     }
 }
 \`\`\`
 
-### 表格
-\`\`\`
-| 列1 | 列2 | 列3 |
-|-----|-----|-----|
-| 内容1 | 内容2 | 内容3 |
-\`\`\`
-
-### 引用
-\`\`\`
-> 这是一个引用块
-> 可以包含多行内容
+\`\`\`bash
+#!/bin/bash
+echo "当前目录:\$(pwd)"
+ls -la
 \`\`\`
 
-### 分割线
+\`\`\`json
+{
+  "name": "Markdown Editor",
+  "version": "1.0.0",
+  "features": ["编辑", "预览", "导出"]
+}
 \`\`\`
+
+### 流程图示例
+
+\`\`\`mermaid
+graph TD
+    A[开始] --> B{是否登录?}
+    B -->|是| C[显示主界面]
+    B -->|否| D[显示登录界面]
+    D --> E[用户输入]
+    E --> F{验证成功?}
+    F -->|是| C
+    F -->|否| G[显示错误信息]
+    G --> D
+    C --> H[结束]
+\`\`\`
+
+\`\`\`mermaid
+sequenceDiagram
+    participant U as 用户
+    participant E as 编辑器
+    participant P as 预览
+    participant S as 保存
+
+    U->>E: 输入内容
+    E->>P: 实时更新预览
+    U->>S: 点击保存
+    S->>E: 保存文件
+    S-->>U: 保存成功
+\`\`\`
+
 ---
-\`\`\`
-
-## 开始使用
-
-现在你可以开始编写你的 Markdown 文档了！
-
-1. 在左侧编辑器中输入 Markdown 语法
-2. 右侧会实时显示预览效果
-3. 使用工具栏按钮进行文件操作
-4. 按 F11 进入全屏预览模式
-
-祝你使用愉快！ 🎉`;
+开始编写你的 Markdown 文档吧！`;
   
-  editor.value = currentContent;
-  updatePreview();
-}
-
-// 创建空白文档
-function createBlankDocument() {
-  currentContent = '';
-  editor.value = currentContent;
-  updatePreview();
-}
-
-// 处理编辑器内容变化
-function handleEditorChange() {
-  currentContent = editor.value;
-  updatePreview();
-  updateWordCount();
-  
-  // 延迟保存历史记录，避免频繁保存
-  clearTimeout(handleEditorChange.timeoutId);
-  handleEditorChange.timeoutId = setTimeout(() => {
-    saveToHistory();
-  }, 1000);
-}
-
-// 更新预览内容
-function updatePreview() {
-  if (typeof marked !== 'undefined') {
-    const html = marked.parse(currentContent);
-    preview.innerHTML = html;
+    // 应用状态
+    let currentFile = null;
+    let hasUnsavedChanges = false;
+    let syncScroll = true;
+    let isFullscreen = false;
     
-    // 如果当前是全屏模式，同时更新全屏内容
-    if (isFullscreen) {
-      fullscreenContent.innerHTML = html;
+    // 撤销重做功能已移除
+    
+    // 只有在没有文件关联内容时才加载默认内容
+    console.log('检查文件关联标志:', hasFileAssociationContent, '全局标志:', window.hasFileAssociationContent);
+    if (!hasFileAssociationContent && !window.hasFileAssociationContent) {
+        console.log('加载默认内容');
+        editor.value = defaultContent;
+    } else {
+        console.log('跳过默认内容加载，等待文件关联');
     }
     
-    // 延迟增强代码块，确保 Prism.js 完全加载
-    setTimeout(() => {
-      enhanceCodeBlocks();
-    }, 100);
-    
-    // 渲染 Mermaid 图表
-    renderMermaidDiagrams();
-    
-    // 生成全屏目录
-    if (isFullscreen) {
-      generateFullscreenToc();
-    }
-  } else {
-    // 如果 marked 库未加载，显示纯文本
-    preview.innerHTML = `<pre>${currentContent}</pre>`;
-    if (isFullscreen) {
-      fullscreenContent.innerHTML = `<pre>${currentContent}</pre>`;
-    }
-  }
-}
-
-// 渲染 Mermaid 图表
-function renderMermaidDiagrams() {
-  if (typeof mermaid !== 'undefined') {
-    // 查找所有 mermaid 代码块
-    const mermaidElements = document.querySelectorAll('code.language-mermaid, pre code.language-mermaid');
-    
-    mermaidElements.forEach((element, index) => {
-      // 创建唯一的 ID
-      const diagramId = `mermaid-diagram-${Date.now()}-${index}`;
-      
-      // 创建新的 div 元素来替换代码块
+    // 更新预览
+    window.updatePreview = function() {
+        try {
+            // 检查highlight.js是否可用
+            const hasHighlight = typeof hljs !== 'undefined';
+            console.log('highlight.js可用:', hasHighlight);
+            if (hasHighlight) {
+                console.log('hljs对象:', hljs);
+                console.log('支持的语言数量:', Object.keys(hljs.listLanguages()).length);
+                console.log('支持的语言:', hljs.listLanguages());
+            }
+            
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    console.log('高亮代码块，语言:', lang);
+                    if (hasHighlight) {
+                        if (lang && hljs.getLanguage(lang)) {
+                            console.log('使用指定语言高亮:', lang);
+                            return hljs.highlight(code, { language: lang }).value;
+                        }
+                        console.log('使用自动检测高亮');
+                        return hljs.highlightAuto(code).value;
+                    }
+                    console.log('highlight.js不可用，返回原始代码');
+                    return code;
+                },
+                breaks: true,
+                gfm: true
+            });
+            
+            const html = marked.parse(editor.value);
+            preview.innerHTML = html;
+            
+            // 渲染Mermaid图表
+            if (window.mermaid) {
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: 'default',
+                    securityLevel: 'loose'
+                });
+                
+                // 查找所有mermaid代码块并渲染
+                const mermaidElements = preview.querySelectorAll('pre code.language-mermaid');
+                mermaidElements.forEach((element, index) => {
+                    const mermaidCode = element.textContent;
       const mermaidDiv = document.createElement('div');
       mermaidDiv.className = 'mermaid';
-      mermaidDiv.id = diagramId;
-      mermaidDiv.textContent = element.textContent;
+                    mermaidDiv.textContent = mermaidCode;
       
       // 替换原来的代码块
       const preElement = element.parentElement;
-      preElement.parentNode.replaceChild(mermaidDiv, preElement);
-    });
-    
-    // 初始化并渲染 Mermaid
-    try {
-      const isDark = currentTheme === 'dark' || (currentTheme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: isDark ? 'dark' : 'default',
-        themeVariables: isDark ? {
-          primaryColor: '#4dabf7',
-          primaryTextColor: '#ffffff',
-          primaryBorderColor: '#4dabf7',
-          lineColor: '#ffffff',
-          secondaryColor: '#2d2d2d',
-          tertiaryColor: '#1e1e1e'
-        } : {
-          primaryColor: '#007bff',
-          primaryTextColor: '#333',
-          primaryBorderColor: '#007bff',
-          lineColor: '#333',
-          secondaryColor: '#f8f9fa',
-          tertiaryColor: '#ffffff'
-        }
-      });
-      
-      // 渲染所有 Mermaid 图表
-      mermaid.run({
-        querySelector: '.mermaid'
-      }).catch(error => {
-        console.error('Mermaid 渲染错误:', error);
-      });
+                    preElement.parentElement.replaceChild(mermaidDiv, preElement);
+                    
+                    // 渲染这个图表
+                    mermaid.render(`mermaid-${index}`, mermaidCode).then(({ svg }) => {
+                        mermaidDiv.innerHTML = svg;
+                    }).catch(error => {
+                        console.error('Mermaid渲染失败:', error);
+                        mermaidDiv.innerHTML = `<p>流程图渲染失败: ${error.message}</p>`;
+                    });
+                });
+            }
+            
+            // 重新高亮所有代码块（如果highlight.js可用）
+            if (hasHighlight) {
+                const codeBlocks = preview.querySelectorAll('pre code');
+                console.log('找到代码块数量:', codeBlocks.length);
+                codeBlocks.forEach((block, index) => {
+                    if (!block.classList.contains('language-mermaid')) {
+                        console.log(`高亮代码块 ${index}:`, block.className, block.textContent.substring(0, 50));
+                        try {
+                            hljs.highlightElement(block);
+                            console.log(`代码块 ${index} 高亮成功`);
+                        } catch (error) {
+                            console.error(`代码块 ${index} 高亮失败:`, error);
+                        }
+                    }
+                });
+            } else {
+                console.log('highlight.js不可用，跳过代码高亮');
+            }
+            
     } catch (error) {
-      console.error('Mermaid 初始化错误:', error);
-    }
-  }
-}
-
-// 增强代码块 - 使用 Prism.js 标准方式
-function enhanceCodeBlocks() {
-  // 等待 Prism.js 加载完成
-  if (typeof Prism === 'undefined') {
-    console.log('Prism.js 未加载，等待加载...');
-    setTimeout(enhanceCodeBlocks, 100);
-    return;
-  }
-  
-  console.log('Prism.js 已加载，开始处理代码块');
-  
-  // 使用 Prism.js 自动高亮所有代码块
-  Prism.highlightAll();
-  
-  // 为每个代码块添加额外功能
-  const codeBlocks = document.querySelectorAll('pre code');
-  
-  codeBlocks.forEach((codeBlock) => {
-    const preElement = codeBlock.parentElement;
+            console.error('预览更新失败:', error);
+            preview.innerHTML = '<p>预览渲染失败</p>';
+        }
+    };
     
-    // 跳过已经处理过的代码块
-    if (preElement.hasAttribute('data-enhanced')) {
+    // 更新标题
+    window.updateTitle = function() {
+        const fileName = currentFile ? 
+            currentFile.split('\\').pop().split('/').pop() : 
+            null;
+        const title = fileName ? 
+            `${fileName} - Markdown Editor` : 
+            'Markdown Editor';
+        document.title = hasUnsavedChanges ? `*${title}` : title;
+    };
+    
+    // 更新highlight.js主题
+    function updateHighlightTheme(theme) {
+        const lightTheme = document.getElementById('highlight-light-theme');
+        const darkTheme = document.getElementById('highlight-dark-theme');
+        
+        if (!lightTheme || !darkTheme) {
+            console.log('highlight.js主题样式未找到');
       return;
     }
     
-    // 保存原始文本内容
-    const originalText = codeBlock.textContent;
+        console.log('当前主题:', theme);
+        console.log('浅色主题状态:', lightTheme.disabled);
+        console.log('深色主题状态:', darkTheme.disabled);
+        
+        // 先禁用所有主题
+        lightTheme.disabled = true;
+        darkTheme.disabled = true;
+        
+        // 根据主题选择样式
+        if (theme === 'dark') {
+            darkTheme.disabled = false;
+            console.log('启用highlight.js深色主题');
+        } else if (theme === 'light') {
+            lightTheme.disabled = false;
+            console.log('启用highlight.js浅色主题');
+        } else if (theme === 'auto') {
+            // 自动主题：让CSS媒体查询决定
+            lightTheme.disabled = false;
+            darkTheme.disabled = false;
+            console.log('启用highlight.js自动主题');
+        }
+        
+        console.log('主题切换后状态:');
+        console.log('浅色主题状态:', lightTheme.disabled);
+        console.log('深色主题状态:', darkTheme.disabled);
+        
+        // 延迟重新高亮，确保样式已应用
+        setTimeout(() => {
+            if (typeof hljs !== 'undefined') {
+                console.log('开始重新高亮代码块...');
+                const codeBlocks = preview.querySelectorAll('pre code');
+                console.log('找到代码块数量:', codeBlocks.length);
+                
+                codeBlocks.forEach((block, index) => {
+                    if (!block.classList.contains('language-mermaid')) {
+                        console.log(`处理代码块 ${index}:`, block.className);
+                        
+                        // 清除之前的高亮状态
+                        block.removeAttribute('data-highlighted');
+                        block.className = block.className.replace(/hljs-[\w-]+/g, '').trim();
+                        
+                        // 重新高亮
+                        try {
+                            hljs.highlightElement(block);
+                            console.log(`代码块 ${index} 重新高亮成功，新类名:`, block.className);
+                        } catch (error) {
+                            console.error(`代码块 ${index} 重新高亮失败:`, error);
+                        }
+                    }
+                });
+                console.log('代码块重新高亮完成');
+            } else {
+                console.error('hljs未定义，无法重新高亮');
+            }
+        }, 200);
+    }
     
-    // 获取语言类型
-    const languageMatch = codeBlock.className.match(/language-(\w+)/);
-    const language = languageMatch ? languageMatch[1] : 'text';
+    // 标记为已修改
+    function markAsChanged() {
+        hasUnsavedChanges = true;
+        updateTitle();
+    }
     
-    // 设置语言属性
-    preElement.setAttribute('data-language', language);
-    preElement.classList.add(`language-${language}`);
+    // 保存历史状态功能已移除
     
-    // 暂时禁用行号显示
-    // if (originalText.split('\n').length > 1) {
-    //   preElement.classList.add('line-numbers');
-    // }
+    // 更新撤销/重做按钮状态功能已移除
     
-    // 添加复制按钮
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'copy-btn';
-    copyBtn.innerHTML = '<span class="copy-icon">📋</span>复制';
-    copyBtn.addEventListener('click', () => copyCode(originalText));
-    preElement.appendChild(copyBtn);
+    // 撤销重做功能已移除
     
-    // 标记为已处理
-    preElement.setAttribute('data-enhanced', 'true');
-  });
-  
-  console.log('代码块处理完成');
-}
-
-// 复制代码功能
-function copyCode(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    showStatus('代码已复制到剪贴板', 'success');
-  }).catch(err => {
-    console.error('复制失败:', err);
-    showStatus('复制失败', 'error');
-  });
-}
-
-// 旧的语法高亮函数已删除，现在使用 Prism.js
-
-// 更新字数统计
-function updateWordCount() {
-  const text = currentContent.trim();
-  const words = text ? text.split(/\s+/).length : 0;
-  const chars = currentContent.length;
-  wordCountSpan.textContent = `字数: ${words} | 字符: ${chars}`;
-}
-
-// 处理编辑器滚动
-function handleEditorScroll() {
-  if (isScrolling || !syncScrollEnabled) return;
-  
-  isScrolling = true;
-  syncScroll(editor, preview, 'editor');
-  
-  // 延迟重置标志，防止频繁触发
-  setTimeout(() => {
-    isScrolling = false;
-  }, 50);
-}
-
-// 处理预览区域滚动
-function handlePreviewScroll() {
-  if (isScrolling || !syncScrollEnabled) return;
-  
-  isScrolling = true;
-  syncScroll(preview, editor, 'preview');
-  
-  // 延迟重置标志，防止频繁触发
-  setTimeout(() => {
-    isScrolling = false;
-  }, 50);
-}
-
-// 同步滚动函数
-function syncScroll(sourceElement, targetElement, sourceType) {
-  const sourceScrollTop = sourceElement.scrollTop;
-  const sourceScrollHeight = sourceElement.scrollHeight;
-  const sourceClientHeight = sourceElement.clientHeight;
-  
-  // 计算滚动百分比
-  const scrollPercentage = sourceScrollTop / (sourceScrollHeight - sourceClientHeight);
-  
-  // 应用到目标元素
-  const targetScrollHeight = targetElement.scrollHeight;
-  const targetClientHeight = targetElement.clientHeight;
-  const targetScrollTop = scrollPercentage * (targetScrollHeight - targetClientHeight);
-  
-  targetElement.scrollTop = Math.max(0, Math.min(targetScrollTop, targetScrollHeight - targetClientHeight));
-}
-
-// 处理新建文件
-
-// 处理打开文件
-async function handleOpenFile() {
-  console.log('打开文件按钮被点击');
-  try {
-    showStatus('正在打开文件...', 'info');
-    const content = await invoke('open_file');
-    currentContent = content;
-    editor.value = currentContent;
+    // 新建空白文档
+    function createBlankDocument() {
+        if (hasUnsavedChanges) {
+            if (!confirm('当前文档有未保存的更改，确定要创建新文档吗？')) {
+                return;
+            }
+        }
+        
+        editor.value = '';
+        currentFile = null;
+        hasUnsavedChanges = false;
     updatePreview();
-    updateWordCount();
-    showStatus('文件打开成功', 'success');
-  } catch (error) {
-    console.error('打开文件错误:', error);
-    if (error !== '未选择文件') {
-      showStatus(`打开文件失败: ${error}`, 'error');
+        updateTitle();
+        editor.focus();
     }
-  }
-}
-
-// 处理保存文件
-async function handleSaveFile() {
-  console.log('保存文件按钮被点击');
-  try {
-    showStatus('正在保存文件...', 'info');
-    const filePath = await invoke('save_file', { content: currentContent });
-    showStatus(`文件保存成功: ${filePath.split('/').pop()}`, 'success');
-  } catch (error) {
-    console.error('保存文件错误:', error);
-    if (error !== '未选择保存路径') {
-      showStatus(`保存文件失败: ${error}`, 'error');
+    
+    // 使用模板创建文档
+    function createWithTemplate() {
+        if (hasUnsavedChanges) {
+            if (!confirm('当前文档有未保存的更改，确定要创建新文档吗？')) {
+                return;
+            }
+        }
+        
+        editor.value = welcomeTemplate;
+        currentFile = null;
+        hasUnsavedChanges = false;
+        updatePreview();
+        updateTitle();
+        editor.focus();
     }
+    
+    // 同步滚动功能
+    function syncScrollToPreview() {
+        if (!syncScroll) return;
+        
+        const editorScrollTop = editor.scrollTop;
+        const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
+        const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
+        
+        if (editorScrollHeight > 0) {
+            const ratio = editorScrollTop / editorScrollHeight;
+            preview.scrollTop = ratio * previewScrollHeight;
+        }
+    }
+    
+    function syncScrollToEditor() {
+        if (!syncScroll) return;
+        
+        const previewScrollTop = preview.scrollTop;
+        const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
+        const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
+        
+        if (previewScrollHeight > 0) {
+            const ratio = previewScrollTop / previewScrollHeight;
+            editor.scrollTop = ratio * editorScrollHeight;
+        }
+    }
+    
+    // 切换同步滚动
+    function toggleSyncScroll() {
+        syncScroll = !syncScroll;
+        const btn = document.getElementById('sync-btn');
+        const icon = btn.querySelector('.icon');
+        const text = btn.querySelector('.btn-text');
+        
+        if (syncScroll) {
+            // 同步状态
+            btn.classList.add('active');
+            btn.title = '同步滚动 (Ctrl+Shift+S)';
+            icon.textContent = '🔗';
+            text.textContent = '同步';
+        } else {
+            // 不同步状态
+            btn.classList.remove('active');
+            btn.title = '不同步滚动 (Ctrl+Shift+S)';
+            icon.textContent = '🔓';
+            text.textContent = '不同步';
+        }
+    }
+    
+    // 生成目录
+    function generateTOC() {
+        const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        if (headings.length === 0) return '';
+        
+        let toc = '<div class="toc-container"><h3>目录</h3><ul class="toc-list">';
+        
+        headings.forEach((heading, index) => {
+            const level = parseInt(heading.tagName.charAt(1));
+            const text = heading.textContent;
+            const id = `heading-${index}`;
+            
+            // 设置标题ID用于锚点链接
+            heading.id = id;
+            
+            // 生成目录项
+            toc += `<li class="toc-item level-${level}">
+                <a href="#${id}" class="toc-link" data-target="${id}">${text}</a>
+            </li>`;
+        });
+        
+        toc += '</ul></div>';
+        return toc;
+    }
+    
+    // 切换全屏预览
+    function toggleFullscreen() {
+        isFullscreen = !isFullscreen;
+        const btn = document.getElementById('fullscreen-btn');
+        const editorContainer = document.querySelector('.editor-container');
+        const previewContainer = document.querySelector('.preview-container');
+        const mainContent = document.querySelector('.main-content');
+        
+        btn.classList.toggle('active', isFullscreen);
+        
+        if (isFullscreen) {
+            // 进入全屏模式
+            editorContainer.style.display = 'none';
+            previewContainer.style.flex = '1';
+            
+            // 添加全屏样式
+            mainContent.classList.add('fullscreen-mode');
+            
+            // 生成并显示目录
+            const toc = generateTOC();
+            if (toc) {
+                // 创建目录容器
+                let tocContainer = document.querySelector('.fullscreen-toc');
+                if (!tocContainer) {
+                    tocContainer = document.createElement('div');
+                    tocContainer.className = 'fullscreen-toc';
+                    previewContainer.insertBefore(tocContainer, previewContainer.firstChild);
+                }
+                tocContainer.innerHTML = toc;
+                
+                // 添加退出全屏按钮
+                const exitButton = document.createElement('button');
+                exitButton.className = 'exit-fullscreen-btn';
+                exitButton.innerHTML = '✕ 退出全屏';
+                exitButton.addEventListener('click', toggleFullscreen);
+                tocContainer.appendChild(exitButton);
+                
+                // 添加目录点击事件
+                tocContainer.querySelectorAll('.toc-link').forEach(link => {
+                    link.addEventListener('click', (e) => {
+    e.preventDefault();
+                        const targetId = link.getAttribute('data-target');
+                        const targetElement = document.getElementById(targetId);
+                        if (targetElement) {
+                            targetElement.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    });
+                });
+            }
+        } else {
+            // 退出全屏模式
+            editorContainer.style.display = 'flex';
+            previewContainer.style.flex = '1';
+            
+            // 移除全屏样式
+            mainContent.classList.remove('fullscreen-mode');
+            
+            // 隐藏目录
+            const tocContainer = document.querySelector('.fullscreen-toc');
+            if (tocContainer) {
+                tocContainer.remove();
+            }
+        }
+    }
+    
+    // 关闭下拉菜单
+    function closeDropdowns() {
+        document.querySelectorAll('.dropdown-menu').forEach(menu => {
+            menu.classList.remove('show');
+        });
+    }
+    
+    // 文件操作功能
+    async function openFile() {
+        try {
+            if (window.__TAURI__ && window.__TAURI__.dialog) {
+                // 尝试使用Tauri内置API
+                const { open } = window.__TAURI__.dialog;
+                const filePath = await open({
+                    filters: [{
+                        name: 'Markdown',
+                        extensions: ['md', 'markdown']
+                    }]
+                });
+                
+                if (filePath) {
+                    await openFileByPath(filePath);
+                }
+            } else {
+                console.log('Tauri API不可用，使用模拟功能');
+                // 模拟打开文件
+                const content = prompt('请输入文件内容（模拟打开文件）:');
+                if (content !== null) {
+                    editor.value = content;
+                    currentFile = '模拟文件.md';
+                    hasUnsavedChanges = false;
+                    updatePreview();
+                    updateTitle();
+                    
+                    // 将光标移到文件开头
+                    editor.focus();
+                    editor.setSelectionRange(0, 0);
+                    editor.scrollTop = 0;
+                }
+            }
+        } catch (error) {
+            console.error('打开文件失败:', error);
+            // 如果Tauri API失败，使用模拟功能
+            const content = prompt('Tauri API失败，请输入文件内容（模拟打开文件）:');
+            if (content !== null) {
+                editor.value = content;
+                currentFile = '模拟文件.md';
+                hasUnsavedChanges = false;
+                updatePreview();
+                updateTitle();
+                
+                // 将光标移到文件开头
+                editor.focus();
+                editor.setSelectionRange(0, 0);
+                editor.scrollTop = 0;
+            }
+        }
+    }
+    
+    // 将openFileByPath函数移到全局作用域
+    window.openFileByPath = async function(filePath) {
+        console.log('openFileByPath被调用，文件路径:', filePath);
+        try {
+            if (window.__TAURI__ && window.__TAURI__.invoke) {
+                console.log('使用Tauri invoke API通过Rust后端读取文件...');
+                // 使用Rust后端的open_file_by_path函数
+                const content = await window.__TAURI__.invoke('open_file_by_path', { filePath: filePath });
+                console.log('文件读取成功，内容长度:', content.length);
+                
+                // 检查编辑器元素
+                const editor = document.getElementById('markdown-editor');
+                if (!editor) {
+                    console.error('编辑器元素未找到！');
+                    return;
+                }
+                console.log('编辑器元素找到，设置内容...');
+                
+                editor.value = content;
+                window.currentFile = filePath; // 保存完整路径
+                window.hasUnsavedChanges = false;
+                
+                // 更新预览和标题
+                if (window.updatePreview) window.updatePreview();
+                if (window.updateTitle) window.updateTitle();
+                
+                // 将光标移到文件开头，避免滚动到末尾
+                editor.focus();
+                editor.setSelectionRange(0, 0);
+                editor.scrollTop = 0;
+                
+                console.log('文件打开成功:', filePath);
+            } else {
+                console.log('Tauri invoke API不可用，使用模拟功能');
+                const content = prompt('请输入文件内容（模拟打开文件）:');
+                if (content !== null) {
+                    const editor = document.getElementById('markdown-editor');
+                    if (editor) {
+                        editor.value = content;
+                        window.currentFile = '模拟文件.md';
+                        window.hasUnsavedChanges = false;
+                        if (window.updatePreview) window.updatePreview();
+                        if (window.updateTitle) window.updateTitle();
+                        
+                        // 将光标移到文件开头
+                        editor.focus();
+                        editor.setSelectionRange(0, 0);
+                        editor.scrollTop = 0;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('读取文件失败:', error);
+            const content = prompt('读取文件失败，请输入文件内容（模拟打开文件）:');
+            if (content !== null) {
+                const editor = document.getElementById('markdown-editor');
+                if (editor) {
+                    editor.value = content;
+                    window.currentFile = '模拟文件.md';
+                    window.hasUnsavedChanges = false;
+                    if (window.updatePreview) window.updatePreview();
+                    if (window.updateTitle) window.updateTitle();
+                    
+                    // 将光标移到文件开头
+                    editor.focus();
+                    editor.setSelectionRange(0, 0);
+                    editor.scrollTop = 0;
+                }
+            }
+        }
+    };
+    
+    async function saveFile() {
+        if (!currentFile) {
+            saveAsFile();
+    return;
   }
-}
-
-
-// 切换同步滚动
-function toggleSyncScroll() {
-  syncScrollEnabled = !syncScrollEnabled;
   
-  if (syncScrollEnabled) {
-    syncScrollBtn.textContent = '🔗 同步';
-    syncScrollBtn.classList.remove('disabled');
-    syncScrollBtn.setAttribute('data-enabled', 'true');
-    showStatus('同步滚动已启用', 'success');
+        try {
+            console.log('检查Tauri API状态:');
+            console.log('window.__TAURI__:', window.__TAURI__);
+            console.log('window.__TAURI__.fs:', window.__TAURI__?.fs);
+            
+            if (window.__TAURI__ && window.__TAURI__.fs) {
+                console.log('尝试保存文件:', currentFile);
+                
+                // 直接使用fs API
+                const { writeTextFile } = window.__TAURI__.fs;
+                console.log('writeTextFile函数:', writeTextFile);
+                
+                // 直接使用原始文件路径
+                console.log('使用文件路径:', currentFile);
+                await writeTextFile(currentFile, editor.value);
+                
+                hasUnsavedChanges = false;
+                updateTitle();
+                console.log('文件保存成功');
   } else {
-    syncScrollBtn.textContent = '🔗 不同步';
-    syncScrollBtn.classList.add('disabled');
-    syncScrollBtn.setAttribute('data-enabled', 'false');
-    showStatus('同步滚动已禁用', 'info');
-  }
-}
-
-
-// 初始化主题
-function initTheme() {
-  // 从本地存储加载主题设置
-  const savedTheme = localStorage.getItem('markdown-editor-theme') || 'auto';
-  currentTheme = savedTheme;
-  themeSelector.value = currentTheme;
-  applyTheme(currentTheme);
-  
-  // 监听系统主题变化
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (currentTheme === 'auto') {
-      applyTheme('auto');
+                console.log('Tauri API不可用，模拟保存文件');
+                hasUnsavedChanges = false;
+                updateTitle();
+                alert('文件已保存（模拟）');
+            }
+        } catch (error) {
+            console.error('保存文件失败:', error);
+            console.error('错误详情:', error.message);
+            console.error('错误堆栈:', error.stack);
+            // 如果Tauri API失败，使用模拟功能
+            hasUnsavedChanges = false;
+            updateTitle();
+            alert('文件已保存（模拟，Tauri API失败）');
+        }
     }
-  });
-}
-
-// 切换 Prism.js 主题
-function switchPrismTheme(theme) {
-  const lightTheme = document.getElementById('prism-theme-light');
-  const darkTheme = document.getElementById('prism-theme-dark');
-  
-  if (theme === 'light') {
-    lightTheme.disabled = false;
-    darkTheme.disabled = true;
-  } else if (theme === 'dark') {
-    lightTheme.disabled = true;
-    darkTheme.disabled = false;
-  }
-}
-
-// 应用主题
-function applyTheme(theme) {
-  currentTheme = theme;
-  
-  // 移除现有主题类
-  document.documentElement.removeAttribute('data-theme');
-  
-  if (theme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    // 切换到浅色 Prism.js 主题
-    switchPrismTheme('light');
-  } else if (theme === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    // 切换到暗色 Prism.js 主题
-    switchPrismTheme('dark');
-  } else if (theme === 'auto') {
-    // auto 主题根据系统偏好决定
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefersDark) {
-      switchPrismTheme('dark');
-    } else {
-      switchPrismTheme('light');
-    }
-  }
-  
-  // 保存主题设置
-  localStorage.setItem('markdown-editor-theme', theme);
-  
-  // 重新渲染 Mermaid 图表以应用新主题
-  setTimeout(() => {
-    renderMermaidDiagrams();
-  }, 100);
-  
-  // 重新高亮代码块以应用新主题
-  setTimeout(() => {
-    enhanceCodeBlocks();
-  }, 200);
-}
-
-// 处理主题切换
-function handleThemeChange() {
-  const selectedTheme = themeSelector.value;
-  applyTheme(selectedTheme);
-  
-  const themeNames = {
-    'light': '浅色主题',
-    'dark': '暗黑主题',
-    'auto': '自动切换'
-  };
-  
-  showStatus(`已切换到${themeNames[selectedTheme]}`, 'success');
-}
-
-// 显示状态信息
-function showStatus(message, type = 'info') {
-  statusText.textContent = message;
-  statusText.className = `status-${type}`;
-  
-  // 3秒后清除状态信息
-  setTimeout(() => {
-    statusText.textContent = '就绪';
-    statusText.className = '';
-  }, 3000);
-}
-
-// 处理键盘快捷键
-function handleKeyboardShortcuts(e) {
-  // Ctrl/Cmd + S: 保存
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    e.preventDefault();
-    handleSaveFile();
-  }
-  
-  // Ctrl/Cmd + O: 打开
-  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
-    e.preventDefault();
-    handleOpenFile();
-  }
-  
-  // Ctrl/Cmd + N: 新建
-  if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-    e.preventDefault();
-    handleNewFile();
-  }
-  
-  
-  // Ctrl/Cmd + Shift + S: 另存为
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
-    e.preventDefault();
-    handleSaveAsFile();
-  }
-  
-  // Ctrl/Cmd + Z: 撤销
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-    e.preventDefault();
-    handleUndo();
-  }
-  
-  // Ctrl/Cmd + Y 或 Ctrl/Cmd + Shift + Z: 重做
-  if (((e.ctrlKey || e.metaKey) && e.key === 'y') || 
-      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z')) {
-    e.preventDefault();
-    handleRedo();
-  }
-  
-  // Ctrl/Cmd + F: 查找
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-    e.preventDefault();
-    openFindReplaceModal();
-  }
-  
-  // Ctrl/Cmd + H: 替换
-  if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
-    e.preventDefault();
-    openFindReplaceModal();
-  }
-  
-  // Ctrl/Cmd + Shift + R: 切换同步滚动
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
-    e.preventDefault();
-    toggleSyncScroll();
-  }
-  
-  // Ctrl/Cmd + Shift + T: 切换主题
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
-    e.preventDefault();
-    const themes = ['light', 'dark', 'auto'];
-    const currentIndex = themes.indexOf(currentTheme);
-    const nextIndex = (currentIndex + 1) % themes.length;
-    themeSelector.value = themes[nextIndex];
-    handleThemeChange();
-  }
-  
-  // F11: 全屏预览
-  if (e.key === 'F11') {
-    e.preventDefault();
-    if (isFullscreen) {
-      closeFullscreen();
-    } else {
-      openFullscreen();
-    }
-  }
-  
-  // Escape: 关闭全屏
-  if (e.key === 'Escape' && isFullscreen) {
-    closeFullscreen();
-  }
-  
-}
-
-// 添加状态样式
-const style = document.createElement('style');
-style.textContent = `
-  .status-success {
-    color: var(--success-color);
-    font-weight: 500;
-  }
-  
-  .status-error {
-    color: var(--danger-color);
-    font-weight: 500;
-  }
-  
-  .status-info {
-    color: var(--accent-color);
-    font-weight: 500;
-  }
-  
-  .btn.active {
-    background-color: var(--accent-color);
-    color: white;
-  }
-`;
-document.head.appendChild(style);
-
-// 另存为文件
-async function handleSaveAsFile() {
-  console.log('另存为文件按钮被点击');
-  try {
-    showStatus('正在另存为文件...', 'info');
-    const filePath = await invoke('save_file', { content: currentContent });
-    showStatus(`文件另存为成功: ${filePath.split('/').pop()}`, 'success');
-  } catch (error) {
-    console.error('另存为文件错误:', error);
-    if (error !== '未选择保存路径') {
-      showStatus(`另存为文件失败: ${error}`, 'error');
-    }
-  }
-}
-
-// 撤销功能
-function handleUndo() {
-  if (historyIndex > 0) {
-    historyIndex--;
-    const content = history[historyIndex];
-    editor.value = content;
-    currentContent = content;
-    updatePreview();
-    updateWordCount();
-    showStatus('已撤销', 'info');
+    
+    async function saveAsFile() {
+        try {
+            if (window.__TAURI__ && window.__TAURI__.dialog) {
+                const { save } = window.__TAURI__.dialog;
+                const filePath = await save({
+                    filters: [{
+                        name: 'Markdown',
+                        extensions: ['md']
+                    }]
+                });
+                
+                if (filePath) {
+                    const { writeTextFile } = window.__TAURI__.fs;
+                    await writeTextFile(filePath, editor.value);
+                    
+                    currentFile = filePath.split('\\').pop().split('/').pop();
+                    hasUnsavedChanges = false;
+                    updateTitle();
+                    console.log('文件另存为成功');
+                }
   } else {
-    showStatus('没有可撤销的操作', 'info');
-  }
-}
-
-// 重做功能
-function handleRedo() {
-  if (historyIndex < history.length - 1) {
-    historyIndex++;
-    const content = history[historyIndex];
-    editor.value = content;
-    currentContent = content;
-    updatePreview();
-    updateWordCount();
-    showStatus('已重做', 'info');
-  } else {
-    showStatus('没有可重做的操作', 'info');
-  }
-}
-
-// 打开查找替换模态框
-function openFindReplaceModal() {
-  findReplaceModal.classList.add('active');
-  findInput.focus();
-  showStatus('查找替换模式', 'info');
-}
-
-// 关闭查找替换模态框
-function closeFindReplaceModal() {
-  findReplaceModal.classList.remove('active');
-  showStatus('已关闭查找替换', 'info');
-}
-
-// 查找下一个
-function handleFindNext() {
-  const searchText = findInput.value;
-  if (!searchText) {
-    showStatus('请输入要查找的文本', 'error');
-    return;
-  }
-  
-  const content = editor.value;
-  const caseSensitive = caseSensitiveCheck.checked;
-  const wholeWord = wholeWordCheck.checked;
-  
-  let searchPattern = searchText;
-  if (!caseSensitive) {
-    searchPattern = searchText.toLowerCase();
-  }
-  
-  if (wholeWord) {
-    searchPattern = `\\b${searchPattern}\\b`;
-  }
-  
-  const regex = new RegExp(searchPattern, caseSensitive ? 'g' : 'gi');
-  const matches = [...content.matchAll(regex)];
-  
-  if (matches.length === 0) {
-    showStatus('未找到匹配的文本', 'error');
-    return;
-  }
-  
-  currentSearchIndex = (currentSearchIndex + 1) % matches.length;
-  const match = matches[currentSearchIndex];
-  
-  // 选中匹配的文本
-  editor.focus();
-  editor.setSelectionRange(match.index, match.index + match[0].length);
-  
-  showStatus(`找到第 ${currentSearchIndex + 1} 个匹配项，共 ${matches.length} 个`, 'success');
-}
-
-// 替换当前
-function handleReplaceCurrent() {
-  const searchText = findInput.value;
-  const replaceText = replaceInput.value;
-  
-  if (!searchText) {
-    showStatus('请输入要查找的文本', 'error');
-    return;
-  }
-  
-  const selection = editor.selectionStart;
-  const content = editor.value;
-  const caseSensitive = caseSensitiveCheck.checked;
-  const wholeWord = wholeWordCheck.checked;
-  
-  let searchPattern = searchText;
-  if (!caseSensitive) {
-    searchPattern = searchText.toLowerCase();
-  }
-  
-  if (wholeWord) {
-    searchPattern = `\\b${searchPattern}\\b`;
-  }
-  
-  const regex = new RegExp(searchPattern, caseSensitive ? 'g' : 'gi');
-  const match = content.slice(selection).match(regex);
-  
-  if (match) {
-    const newContent = content.replace(regex, replaceText);
-    editor.value = newContent;
-    currentContent = newContent;
-    updatePreview();
-    updateWordCount();
-    showStatus('已替换当前匹配项', 'success');
-  } else {
-    showStatus('当前选择不匹配', 'error');
-  }
-}
-
-// 全部替换
-function handleReplaceAll() {
-  const searchText = findInput.value;
-  const replaceText = replaceInput.value;
-  
-  if (!searchText) {
-    showStatus('请输入要查找的文本', 'error');
-    return;
-  }
-  
-  const content = editor.value;
-  const caseSensitive = caseSensitiveCheck.checked;
-  const wholeWord = wholeWordCheck.checked;
-  
-  let searchPattern = searchText;
-  if (!caseSensitive) {
-    searchPattern = searchText.toLowerCase();
-  }
-  
-  if (wholeWord) {
-    searchPattern = `\\b${searchPattern}\\b`;
-  }
-  
-  const regex = new RegExp(searchPattern, caseSensitive ? 'g' : 'gi');
-  const matches = content.match(regex);
-  
-  if (!matches) {
-    showStatus('未找到匹配的文本', 'error');
-    return;
-  }
-  
-  const newContent = content.replace(regex, replaceText);
-  editor.value = newContent;
-  currentContent = newContent;
-  updatePreview();
-  updateWordCount();
-  showStatus(`已替换 ${matches.length} 个匹配项`, 'success');
-}
-
-// 导出为HTML
-function handleExport() {
-  if (typeof marked !== 'undefined') {
-    const html = marked.parse(currentContent);
-    const fullHtml = `<!DOCTYPE html>
+                console.log('Tauri API不可用，模拟另存为');
+                const fileName = prompt('请输入文件名:', 'document.md');
+                if (fileName) {
+                    currentFile = fileName;
+                    hasUnsavedChanges = false;
+                    updateTitle();
+                    alert('文件已另存为（模拟）');
+                }
+            }
+        } catch (error) {
+            console.error('另存为失败:', error);
+            // 如果Tauri API失败，使用模拟功能
+            const fileName = prompt('Tauri API失败，请输入文件名（模拟另存为）:', 'document.md');
+            if (fileName) {
+                currentFile = fileName;
+                hasUnsavedChanges = false;
+                updateTitle();
+                alert('文件已另存为（模拟，Tauri API失败）');
+            }
+        }
+    }
+    
+    async function exportToHtml() {
+        try {
+            const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导出的Markdown文档</title>
+    <title>${currentFile || 'Markdown文档'}</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
-        h1, h2, h3, h4, h5, h6 { color: #333; margin-top: 1.5em; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
         code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
         pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+        blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; }
     </style>
 </head>
 <body>
-${html}
+${marked.parse(editor.value)}
 </body>
 </html>`;
     
-    const blob = new Blob([fullHtml], { type: 'text/html' });
+            if (window.__TAURI__ && window.__TAURI__.dialog) {
+                const { save } = window.__TAURI__.dialog;
+                const filePath = await save({
+                    filters: [{
+                        name: 'HTML',
+                        extensions: ['html']
+                    }]
+                });
+                
+                if (filePath) {
+                    const { writeTextFile } = window.__TAURI__.fs;
+                    await writeTextFile(filePath, html);
+                    console.log('HTML导出成功');
+                }
+            } else {
+                console.log('Tauri API不可用，模拟导出HTML');
+                const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'markdown-export.html';
-    document.body.appendChild(a);
+                a.download = (currentFile || 'document').replace('.md', '') + '.html';
     a.click();
-    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    showStatus('HTML文件已导出', 'success');
-  } else {
-    showStatus('Markdown解析库未加载', 'error');
-  }
-}
-
-// 保存历史记录
-function saveToHistory() {
-  const content = editor.value;
-  if (content !== currentContent) {
-    history = history.slice(0, historyIndex + 1);
-    history.push(content);
-    historyIndex = history.length - 1;
-    
-    // 限制历史记录数量
-    if (history.length > 50) {
-      history.shift();
-      historyIndex--;
+            }
+        } catch (error) {
+            console.error('HTML导出失败:', error);
+        }
     }
-  }
-}
-
-// 打开全屏预览
-function openFullscreen() {
-  isFullscreen = true;
-  fullscreenModal.classList.add('active');
-  
-  console.log('进入全屏模式，开始生成目录...');
-  console.log('目录面板元素:', fullscreenTocPanel);
-  console.log('目录面板可见性:', fullscreenTocPanel.style.display);
-  
-  // 确保全屏内容与预览内容一致
-  if (typeof marked !== 'undefined') {
-    const html = marked.parse(currentContent);
-    fullscreenContent.innerHTML = html;
     
-    // 增强全屏内容中的代码块
-    enhanceCodeBlocks();
+    // 工具栏按钮事件
+    // 新建文档下拉菜单
+    const newBtn = document.getElementById('new-btn');
+    const newBlank = document.getElementById('new-blank');
+    const newTemplate = document.getElementById('new-template');
     
-    // 渲染全屏内容中的 Mermaid 图表
-    renderMermaidDiagrams();
+    if (newBtn) {
+        newBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = newBtn.nextElementSibling;
+            menu.classList.toggle('show');
+        });
+    }
     
-    // 生成全屏目录
-    console.log('开始生成全屏目录...');
-    generateFullscreenToc();
-    console.log('全屏目录生成完成，目录项数量:', fullscreenTocItems.length);
+    if (newBlank) {
+        newBlank.addEventListener('click', () => {
+            createBlankDocument();
+            closeDropdowns();
+        });
+    }
+    
+    if (newTemplate) {
+        newTemplate.addEventListener('click', () => {
+            createWithTemplate();
+            closeDropdowns();
+        });
+    }
+    
+    // 其他按钮
+    console.log('设置按钮事件监听器...');
+    console.log('DOM已加载，开始查找按钮元素...');
+    
+    const openBtn = document.getElementById('open-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const saveAsBtn = document.getElementById('save-as-btn');
+    const syncBtn = document.getElementById('sync-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    
+    console.log('按钮元素查找结果:');
+    console.log('openBtn:', openBtn);
+    console.log('saveBtn:', saveBtn);
+    console.log('saveAsBtn:', saveAsBtn);
+    console.log('syncBtn:', syncBtn);
+    console.log('exportBtn:', exportBtn);
+    console.log('fullscreenBtn:', fullscreenBtn);
+    
+    // 检查按钮是否可点击
+    if (openBtn) {
+        console.log('openBtn样式:', window.getComputedStyle(openBtn).pointerEvents);
+        console.log('openBtn disabled:', openBtn.disabled);
+    }
+    
+    if (openBtn) {
+        console.log('为openBtn设置事件监听器...');
+        openBtn.onclick = function(e) {
+            console.log('打开文件按钮被点击！');
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                openFile();
+            } catch (error) {
+                console.error('openFile函数执行错误:', error);
+            }
+        };
+        console.log('打开文件按钮事件监听器已设置');
+        
+        // 测试事件监听器是否工作
+        console.log('测试openBtn点击事件...');
+        openBtn.onmousedown = function() {
+            console.log('openBtn mousedown事件触发');
+        };
   } else {
-    fullscreenContent.innerHTML = `<pre>${currentContent}</pre>`;
-  }
-  
-  showStatus('已进入全屏预览模式', 'info');
-}
-
-// 关闭全屏预览
-function closeFullscreen() {
-  isFullscreen = false;
-  fullscreenModal.classList.remove('active');
-  showStatus('已退出全屏预览模式', 'info');
-}
-
-
-// 生成全屏目录
-function generateFullscreenToc() {
-  const headings = fullscreenContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
-  fullscreenTocItems = [];
-  
-  if (headings.length === 0) {
-    clearFullscreenToc();
-    return;
-  }
-  
-  // 为每个标题添加ID
-  headings.forEach((heading, index) => {
-    const id = `fullscreen-heading-${index}`;
-    heading.id = id;
+        console.error('openBtn元素未找到！');
+    }
     
-    const level = parseInt(heading.tagName.charAt(1));
-    const text = heading.textContent.trim();
+    if (saveBtn) {
+        saveBtn.onclick = function() {
+            console.log('保存文件按钮被点击');
+            try {
+                saveFile();
+            } catch (error) {
+                console.error('saveFile函数执行错误:', error);
+            }
+        };
+        console.log('保存文件按钮事件监听器已设置');
+    }
     
-    fullscreenTocItems.push({
-      id: id,
-      level: level,
-      text: text,
-      element: heading
+    if (saveAsBtn) {
+        saveAsBtn.onclick = function() {
+            console.log('另存为按钮被点击');
+            try {
+                saveAsFile();
+            } catch (error) {
+                console.error('saveAsFile函数执行错误:', error);
+            }
+        };
+        console.log('另存为按钮事件监听器已设置');
+    }
+    
+    if (syncBtn) {
+        syncBtn.onclick = function() {
+            console.log('同步滚动按钮被点击');
+            try {
+                toggleSyncScroll();
+            } catch (error) {
+                console.error('toggleSyncScroll函数执行错误:', error);
+            }
+        };
+        console.log('同步滚动按钮事件监听器已设置');
+    }
+    
+    if (exportBtn) {
+        exportBtn.onclick = function() {
+            console.log('导出按钮被点击');
+            try {
+                exportToHtml();
+            } catch (error) {
+                console.error('exportToHtml函数执行错误:', error);
+            }
+        };
+        console.log('导出按钮事件监听器已设置');
+    }
+    
+    if (fullscreenBtn) {
+        fullscreenBtn.onclick = function() {
+            console.log('全屏按钮被点击');
+            try {
+                toggleFullscreen();
+            } catch (error) {
+                console.error('toggleFullscreen函数执行错误:', error);
+            }
+        };
+        console.log('全屏按钮事件监听器已设置');
+    }
+    
+    // 主题切换
+    document.getElementById('theme-select')?.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        if (theme === 'auto') {
+            // 自动主题：移除data-theme属性，让CSS媒体查询生效
+            document.body.removeAttribute('data-theme');
+        } else {
+            // 手动主题：设置data-theme属性
+            document.body.setAttribute('data-theme', theme);
+        }
+        localStorage.setItem('markdown-editor-theme', theme);
+        
+        // 更新highlight.js样式
+        updateHighlightTheme(theme);
     });
-  });
-  
-  renderFullscreenToc();
-}
-
-// 渲染全屏目录
-function renderFullscreenToc() {
-  console.log('renderFullscreenToc 被调用，目录项数量:', fullscreenTocItems.length);
-  
-  if (fullscreenTocItems.length === 0) {
-    console.log('没有目录项，清空目录');
-    clearFullscreenToc();
-    return;
-  }
-  
-  const tocList = document.createElement('ul');
-  tocList.className = 'toc-list';
-  
-  fullscreenTocItems.forEach(item => {
-    const li = document.createElement('li');
-    li.className = `toc-item level-${item.level}`;
     
-    const link = document.createElement('a');
-    link.href = `#${item.id}`;
-    link.className = 'toc-link';
-    link.textContent = item.text;
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', closeDropdowns);
     
-    // 添加点击事件
-    link.addEventListener('click', (e) => {
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey) {
+            switch (e.key) {
+                case 'n':
+                    e.preventDefault();
+                    createBlankDocument();
+                    break;
+                case 'o':
+                    e.preventDefault();
+                    openFile();
+                    break;
+                case 's':
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        saveAsFile();
+  } else {
+                        saveFile();
+                    }
+                    break;
+                // 撤销重做快捷键已移除
+            }
+        }
+        
+        if (e.key === 'F11') {
       e.preventDefault();
-      scrollToFullscreenHeading(item.id);
+            toggleFullscreen();
+        }
     });
     
-    li.appendChild(link);
-    tocList.appendChild(li);
-  });
-  
-  fullscreenTocContent.innerHTML = '';
-  fullscreenTocContent.appendChild(tocList);
-  
-  console.log('目录渲染完成，目录面板可见性:', fullscreenTocPanel.style.display);
-  console.log('目录面板类名:', fullscreenTocPanel.className);
-  
-  // 监听滚动事件，更新活动目录项
-  updateActiveFullscreenTocItem();
-}
-
-// 清空全屏目录
-function clearFullscreenToc() {
-  fullscreenTocContent.innerHTML = '<div class="toc-placeholder">开始编写文档以生成目录...</div>';
-  fullscreenTocItems = [];
-}
-
-// 滚动到全屏指定标题
-function scrollToFullscreenHeading(headingId) {
-  const heading = document.getElementById(headingId);
-  if (heading) {
-    heading.scrollIntoView({ 
-      behavior: 'smooth', 
-      block: 'start' 
+    // 同步滚动事件
+    editor.addEventListener('scroll', syncScrollToPreview);
+    preview.addEventListener('scroll', syncScrollToEditor);
+    
+    // 编辑器输入事件
+    editor.addEventListener('input', () => {
+        markAsChanged();
+        updatePreview();
     });
     
-    // 更新活动目录项
-    updateActiveFullscreenTocItem();
+    // 撤销重做历史保存功能已移除
     
-    showStatus(`已跳转到: ${heading.textContent}`, 'success');
-  }
-}
-
-// 更新全屏活动目录项
-function updateActiveFullscreenTocItem() {
-  const tocLinks = fullscreenTocContent.querySelectorAll('.toc-link');
-  const headings = fullscreenContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
-  
-  // 清除所有活动状态
-  tocLinks.forEach(link => link.classList.remove('active'));
-  
-  // 找到当前可见的标题
-  let activeHeading = null;
-  
-  for (let i = headings.length - 1; i >= 0; i--) {
-    const heading = headings[i];
-    const rect = heading.getBoundingClientRect();
-    const fullscreenRect = fullscreenContent.getBoundingClientRect();
+    // 加载保存的主题
+    const savedTheme = localStorage.getItem('markdown-editor-theme');
+    if (savedTheme) {
+        if (savedTheme === 'auto') {
+            // 自动主题：移除data-theme属性
+            document.body.removeAttribute('data-theme');
+        } else {
+            // 手动主题：设置data-theme属性
+            document.body.setAttribute('data-theme', savedTheme);
+        }
+        const themeSelect = document.getElementById('theme-select');
+        if (themeSelect) {
+            themeSelect.value = savedTheme;
+        }
+        
+        // 初始化highlight.js主题
+        updateHighlightTheme(savedTheme);
+    } else {
+        // 默认主题
+        updateHighlightTheme('light');
+    }
     
-    if (rect.top <= fullscreenRect.top + 100) {
-      activeHeading = heading;
-      break;
+    // 初始化预览
+    updatePreview();
+    
+    // 初始化同步按钮状态
+    if (syncBtn) {
+        syncBtn.classList.add('active'); // 默认同步状态
     }
-  }
-  
-  // 设置活动状态
-  if (activeHeading) {
-    const activeLink = fullscreenTocContent.querySelector(`a[href="#${activeHeading.id}"]`);
-    if (activeLink) {
-      activeLink.classList.add('active');
+    
+    // 撤销重做按钮状态初始化已移除
+    
+    // 保存原始console方法
+    const originalLog = console.log;
+    const originalError = console.error;
+    
+    // 添加调试信息到面板
+    function addDebugInfo(message) {
+        const debugPanel = document.getElementById('debug-panel');
+        const debugContent = document.getElementById('debug-content');
+        if (debugPanel && debugContent) {
+            debugContent.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+            debugPanel.scrollTop = debugContent.scrollHeight;
+        }
+        // 使用原始console.log避免无限递归
+        originalLog(message);
     }
-  }
-}
-
-// 监听全屏预览区域滚动，更新活动目录项
-function setupFullscreenTocScrollListener() {
-  fullscreenContent.addEventListener('scroll', () => {
-    updateActiveFullscreenTocItem();
-  });
-}
-
-// 页面加载完成后初始化应用
-window.addEventListener('DOMContentLoaded', () => {
-  console.log('Markdown Editor: 开始初始化...');
-  try {
-    init();
-    console.log('Markdown Editor: 初始化完成');
-  } catch (error) {
-    console.error('Markdown Editor: 初始化失败', error);
-  }
+    
+    // 显示调试面板
+    function showDebugPanel() {
+        const debugPanel = document.getElementById('debug-panel');
+        if (debugPanel) {
+            debugPanel.style.display = 'block';
+        }
+    }
+    
+    // 切换调试面板 (Release版本备用)
+    function toggleDebugPanel() {
+        const debugPanel = document.getElementById('debug-panel');
+        if (debugPanel) {
+            if (debugPanel.style.display === 'none' || debugPanel.style.display === '') {
+                debugPanel.style.display = 'block';
+            } else {
+                debugPanel.style.display = 'none';
+            }
+        }
+    }
+    
+    // 将函数暴露到全局作用域
+    window.toggleDebugPanel = toggleDebugPanel;
+    
+    // 添加键盘快捷键 Ctrl+Shift+D 显示调试面板
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+            e.preventDefault();
+            showDebugPanel();
+        }
+    });
+    
+    // 重写console.log以同时显示在调试面板中
+    console.log = function(...args) {
+        originalLog.apply(console, args);
+        addDebugInfo(args.join(' '));
+    };
+    
+    // 重写console.error以同时显示在调试面板中
+    console.error = function(...args) {
+        originalError.apply(console, args);
+        addDebugInfo('ERROR: ' + args.join(' '));
+    };
+    
+    console.log('Markdown编辑器已初始化');
+    addDebugInfo('调试面板已初始化，按 Ctrl+Shift+D 显示/隐藏');
+    
+    // 检查Tauri API是否可用
+    function checkTauriAPI() {
+        if (window.__TAURI__) {
+            console.log('Tauri API可用');
+            if (window.__TAURI__.fs && window.__TAURI__.dialog) {
+                console.log('Tauri文件系统API可用');
+            } else {
+                console.log('Tauri文件系统API不可用，等待加载...');
+                // 等待API加载
+                setTimeout(checkTauriAPI, 1000);
+            }
+        } else {
+            console.log('Tauri API不可用');
+        }
+    }
+    
+    // 延迟检查API
+    setTimeout(checkTauriAPI, 2000);
+    
+    // 设置文件关联事件监听
+    setupFileAssociationListener();
 });
+
+// 文件关联事件监听
+function setupFileAssociationListener() {
+    if (window.__TAURI__ && window.__TAURI__.event) {
+        console.log('设置文件关联事件监听');
+        window.__TAURI__.event.listen('open-file', (event) => {
+            console.log('收到文件关联事件:', event.payload);
+            if (event.payload && typeof event.payload === 'string') {
+                // 设置文件关联标志
+                window.hasFileAssociationContent = true;
+                hasFileAssociationContent = true;
+                console.log('文件关联标志已设置');
+                // 延迟执行，确保编辑器已准备好
+                setTimeout(() => {
+                    console.log('开始调用openFileByPath:', event.payload);
+                    openFileByPath(event.payload);
+                }, 100);
+            }
+        }).then(() => {
+            console.log('文件关联事件监听器设置成功');
+        }).catch((error) => {
+            console.error('文件关联事件监听器设置失败:', error);
+        });
+    } else {
+        console.log('Tauri API不可用，等待加载...');
+        setTimeout(setupFileAssociationListener, 100);
+    }
+}

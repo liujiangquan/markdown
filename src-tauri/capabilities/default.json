@@ -2,11 +2,27 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "fs:scope",
+    "fs:scope-app",
+    "fs:scope-home",
+    "fs:scope-desktop",
+    "fs:scope-document",
+    "fs:allow-read",
+    "fs:allow-write",
+    "fs:read-all",
+    "fs:write-all"
   ]
 }
