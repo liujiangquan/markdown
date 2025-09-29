@@ -105,8 +105,8 @@ sequenceDiagram
 ---
 开始编写你的 Markdown 文档吧！`;
   
-    // 应用状态
-    let currentFile = null;
+    // 应用状态 - 使用全局变量确保一致性
+    window.currentFile = null;
     let hasUnsavedChanges = false;
     let syncScroll = true;
     let isFullscreen = false;
@@ -118,9 +118,9 @@ sequenceDiagram
     if (!hasFileAssociationContent && !window.hasFileAssociationContent) {
         console.log('加载默认内容');
         editor.value = defaultContent;
-    } else {
-        console.log('跳过默认内容加载，等待文件关联');
-    }
+        } else {
+            console.log('跳过默认内容加载，等待文件关联');
+        }
     
     // 更新预览
     window.updatePreview = function() {
@@ -212,8 +212,8 @@ sequenceDiagram
     
     // 更新标题
     window.updateTitle = function() {
-        const fileName = currentFile ? 
-            currentFile.split('\\').pop().split('/').pop() : 
+        const fileName = window.currentFile ? 
+            window.currentFile.split('\\').pop().split('/').pop() : 
             null;
         const title = fileName ? 
             `${fileName} - Markdown Editor` : 
@@ -309,7 +309,7 @@ sequenceDiagram
         }
         
         editor.value = '';
-        currentFile = null;
+        window.currentFile = null;
         hasUnsavedChanges = false;
     updatePreview();
         updateTitle();
@@ -325,9 +325,9 @@ sequenceDiagram
         }
         
         editor.value = welcomeTemplate;
-        currentFile = null;
+        window.currentFile = null;
         hasUnsavedChanges = false;
-        updatePreview();
+    updatePreview();
         updateTitle();
         editor.focus();
     }
@@ -358,9 +358,9 @@ sequenceDiagram
             editor.scrollTop = ratio * editorScrollHeight;
         }
     }
-    
-    // 切换同步滚动
-    function toggleSyncScroll() {
+
+// 切换同步滚动
+function toggleSyncScroll() {
         syncScroll = !syncScroll;
         const btn = document.getElementById('sync-btn');
         const icon = btn.querySelector('.icon');
@@ -372,7 +372,7 @@ sequenceDiagram
             btn.title = '同步滚动 (Ctrl+Shift+S)';
             icon.textContent = '🔗';
             text.textContent = '同步';
-        } else {
+  } else {
             // 不同步状态
             btn.classList.remove('active');
             btn.title = '不同步滚动 (Ctrl+Shift+S)';
@@ -499,10 +499,10 @@ sequenceDiagram
                 // 模拟打开文件
                 const content = prompt('请输入文件内容（模拟打开文件）:');
                 if (content !== null) {
-    editor.value = content;
-                    currentFile = '模拟文件.md';
+                    editor.value = content;
+                    window.currentFile = '模拟文件.md';
                     hasUnsavedChanges = false;
-    updatePreview();
+                    updatePreview();
                     updateTitle();
                     
                     // 将光标移到文件开头
@@ -516,10 +516,10 @@ sequenceDiagram
             // 如果Tauri API失败，使用模拟功能
             const content = prompt('Tauri API失败，请输入文件内容（模拟打开文件）:');
             if (content !== null) {
-    editor.value = content;
-                currentFile = '模拟文件.md';
+                editor.value = content;
+                window.currentFile = '模拟文件.md';
                 hasUnsavedChanges = false;
-    updatePreview();
+                updatePreview();
                 updateTitle();
                 
                 // 将光标移到文件开头
@@ -545,13 +545,13 @@ sequenceDiagram
                 const editor = document.getElementById('markdown-editor');
                 if (!editor) {
                     console.error('编辑器元素未找到！');
-    return;
-  }
+                    return;
+                }
                 console.log('编辑器元素找到，设置内容...');
                 
                 editor.value = content;
                 window.currentFile = filePath; // 保存完整路径
-                window.hasUnsavedChanges = false;
+                hasUnsavedChanges = false;
                 
                 // 更新预览和标题
                 if (window.updatePreview) window.updatePreview();
@@ -571,7 +571,7 @@ sequenceDiagram
                     if (editor) {
                         editor.value = content;
                         window.currentFile = '模拟文件.md';
-                        window.hasUnsavedChanges = false;
+                        hasUnsavedChanges = false;
                         if (window.updatePreview) window.updatePreview();
                         if (window.updateTitle) window.updateTitle();
                         
@@ -588,14 +588,14 @@ sequenceDiagram
             if (content !== null) {
                 const editor = document.getElementById('markdown-editor');
                 if (editor) {
-                    editor.value = content;
+    editor.value = content;
                     window.currentFile = '模拟文件.md';
-                    window.hasUnsavedChanges = false;
+                    hasUnsavedChanges = false;
                     if (window.updatePreview) window.updatePreview();
                     if (window.updateTitle) window.updateTitle();
                     
                     // 将光标移到文件开头
-  editor.focus();
+                    editor.focus();
                     editor.setSelectionRange(0, 0);
                     editor.scrollTop = 0;
                 }
@@ -604,26 +604,77 @@ sequenceDiagram
     };
     
     async function saveFile() {
-        if (!currentFile) {
+        console.log('saveFile被调用，当前文件:', window.currentFile);
+        console.log('window.currentFile类型:', typeof window.currentFile);
+        console.log('window.currentFile是否为null:', window.currentFile === null);
+        console.log('window.currentFile是否为undefined:', window.currentFile === undefined);
+        console.log('window.currentFile是否为空字符串:', window.currentFile === '');
+        
+        if (!window.currentFile) {
+            console.log('没有当前文件，调用另存为');
             saveAsFile();
     return;
   }
   
+        console.log('有当前文件，直接保存到:', window.currentFile);
+  
         try {
             console.log('检查Tauri API状态:');
-            console.log('window.__TAURI__:', window.__TAURI__);
-            console.log('window.__TAURI__.fs:', window.__TAURI__?.fs);
             
+            // 分步检查，避免在某个步骤出错
+            try {
+                console.log('window.__TAURI__存在:', !!window.__TAURI__);
+                if (window.__TAURI__) {
+                    console.log('window.__TAURI__.fs存在:', !!window.__TAURI__.fs);
+                    if (window.__TAURI__.fs) {
+                        console.log('writeTextFile存在:', !!window.__TAURI__.fs.writeTextFile);
+                    }
+                }
+            } catch (apiCheckError) {
+                console.error('API检查出错:', apiCheckError);
+            }
+            
+            // 优先使用invoke API（Tauri 2.0推荐方式）
+            if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                try {
+                    console.log('使用invoke API保存文件:', window.currentFile);
+                    const { invoke } = window.__TAURI__.core;
+                    await invoke('save_file', { 
+                        content: editor.value, 
+                        path: window.currentFile 
+                    });
+                    console.log('invoke API保存成功');
+                    hasUnsavedChanges = false;
+                    updateTitle();
+                    console.log('文件保存成功');
+    return;
+                } catch (invokeError) {
+                    console.error('invoke API保存失败:', invokeError);
+                    console.log('invoke API失败，尝试fs API');
+                }
+            }
+            
+            // 回退到fs API（如果invoke不可用）
             if (window.__TAURI__ && window.__TAURI__.fs) {
-                console.log('尝试保存文件:', currentFile);
+                console.log('尝试使用fs API保存文件:', window.currentFile);
                 
-                // 直接使用fs API
                 const { writeTextFile } = window.__TAURI__.fs;
                 console.log('writeTextFile函数:', writeTextFile);
                 
                 // 直接使用原始文件路径
-                console.log('使用文件路径:', currentFile);
-                await writeTextFile(currentFile, editor.value);
+                console.log('使用文件路径:', window.currentFile);
+                console.log('文件内容长度:', editor.value.length);
+                
+                // 尝试不同的参数格式
+                try {
+                    await writeTextFile(window.currentFile, editor.value);
+                    console.log('writeTextFile调用成功');
+                } catch (writeError) {
+                    console.error('writeTextFile调用失败:', writeError);
+                    // 尝试使用对象格式
+                    await writeTextFile({ path: window.currentFile, contents: editor.value });
+                    console.log('使用对象格式调用成功');
+                }
                 
                 hasUnsavedChanges = false;
                 updateTitle();
@@ -657,19 +708,51 @@ sequenceDiagram
                 });
                 
                 if (filePath) {
-                    const { writeTextFile } = window.__TAURI__.fs;
-                    await writeTextFile(filePath, editor.value);
+                    // 优先使用invoke API
+                    if (window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                        try {
+                            console.log('使用invoke API另存为文件:', filePath);
+                            const { invoke } = window.__TAURI__.core;
+                            await invoke('save_file', { 
+                                content: editor.value, 
+                                path: filePath 
+                            });
+                            console.log('invoke API另存为成功');
+                            window.currentFile = filePath;
+                            hasUnsavedChanges = false;
+                            updateTitle();
+                            console.log('文件另存为成功');
+    return;
+                        } catch (invokeError) {
+                            console.error('invoke API另存为失败:', invokeError);
+                            console.log('invoke API失败，尝试fs API');
+                        }
+                    }
                     
-                    currentFile = filePath.split('\\').pop().split('/').pop();
+                    // 回退到fs API
+                    const { writeTextFile } = window.__TAURI__.fs;
+                    
+                    // 尝试不同的参数格式
+                    try {
+                        await writeTextFile(filePath, editor.value);
+                        console.log('writeTextFile调用成功');
+                    } catch (writeError) {
+                        console.error('writeTextFile调用失败:', writeError);
+                        // 尝试使用对象格式
+                        await writeTextFile({ path: filePath, contents: editor.value });
+                        console.log('使用对象格式调用成功');
+                    }
+                    
+                    window.currentFile = filePath;
                     hasUnsavedChanges = false;
                     updateTitle();
                     console.log('文件另存为成功');
                 }
-  } else {
+            } else {
                 console.log('Tauri API不可用，模拟另存为');
                 const fileName = prompt('请输入文件名:', 'document.md');
                 if (fileName) {
-                    currentFile = fileName;
+                    window.currentFile = fileName;
                     hasUnsavedChanges = false;
                     updateTitle();
                     alert('文件已另存为（模拟）');
@@ -680,7 +763,7 @@ sequenceDiagram
             // 如果Tauri API失败，使用模拟功能
             const fileName = prompt('Tauri API失败，请输入文件名（模拟另存为）:', 'document.md');
             if (fileName) {
-                currentFile = fileName;
+                window.currentFile = fileName;
                 hasUnsavedChanges = false;
                 updateTitle();
                 alert('文件已另存为（模拟，Tauri API失败）');
@@ -695,7 +778,7 @@ sequenceDiagram
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${currentFile || 'Markdown文档'}</title>
+    <title>${window.currentFile || 'Markdown文档'}</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
         code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
@@ -728,7 +811,7 @@ ${marked.parse(editor.value)}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-                a.download = (currentFile || 'document').replace('.md', '') + '.html';
+                a.download = (window.currentFile || 'document').replace('.md', '') + '.html';
     a.click();
     URL.revokeObjectURL(url);
             }
@@ -908,7 +991,7 @@ ${marked.parse(editor.value)}
                     e.preventDefault();
                     if (e.shiftKey) {
                         saveAsFile();
-  } else {
+                    } else {
                         saveFile();
                     }
                     break;

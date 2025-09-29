@@ -56,47 +56,66 @@ async fn open_file(app: tauri::AppHandle, state: State<'_, DialogState>) -> Resu
 async fn save_file(
     app: tauri::AppHandle,
     content: String,
+    path: Option<String>,
     state: State<'_, DialogState>,
 ) -> Result<String, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let result_clone = state.save_result.clone();
-    let app_clone = app.clone();
-    let content_clone = content.clone();
+    // 如果提供了路径，直接保存到该路径
+    if let Some(file_path) = path {
+        println!("直接保存到指定路径: {}", file_path);
+        match fs::write(&file_path, &content) {
+            Ok(_) => {
+                println!("文件保存成功: {}", file_path);
+                Ok(file_path)
+            }
+            Err(e) => {
+                let error_msg = format!("保存文件失败: {}", e);
+                println!("{}", error_msg);
+                Err(error_msg)
+            }
+        }
+    } else {
+        // 如果没有提供路径，弹出文件选择对话框
+        println!("没有提供路径，弹出文件选择对话框");
+        let result_clone = state.save_result.clone();
+        let app_clone = app.clone();
+        let content_clone = content.clone();
 
-    // 清除之前的结果
-    *result_clone.lock().unwrap() = None;
+        // 清除之前的结果
+        *result_clone.lock().unwrap() = None;
 
-    let result_clone_for_callback = result_clone.clone();
-    app_clone.dialog().file().save_file(move |file_path| {
-        let result = if let Some(path) = file_path {
-            if let Some(path_ref) = path.as_path() {
-                match fs::write(path_ref, &content_clone) {
-                    Ok(_) => Ok(path_ref.to_string_lossy().to_string()),
-                    Err(e) => Err(format!("保存文件失败: {}", e)),
+        let result_clone_for_callback = result_clone.clone();
+        app_clone.dialog().file().save_file(move |file_path| {
+            let result = if let Some(path) = file_path {
+                if let Some(path_ref) = path.as_path() {
+                    match fs::write(path_ref, &content_clone) {
+                        Ok(_) => Ok(path_ref.to_string_lossy().to_string()),
+                        Err(e) => Err(format!("保存文件失败: {}", e)),
+                    }
+                } else {
+                    Err("无效的文件路径".to_string())
                 }
             } else {
-                Err("无效的文件路径".to_string())
+                Err("未选择保存路径".to_string())
+            };
+
+            *result_clone_for_callback.lock().unwrap() = Some(result);
+        });
+
+        // 等待用户选择保存路径
+        let mut attempts = 0;
+        while attempts < 100 {
+            // 最多等待10秒
+            if let Some(result) = result_clone.lock().unwrap().take() {
+                return result;
             }
-        } else {
-            Err("未选择保存路径".to_string())
-        };
-
-        *result_clone_for_callback.lock().unwrap() = Some(result);
-    });
-
-    // 等待用户选择保存路径
-    let mut attempts = 0;
-    while attempts < 100 {
-        // 最多等待10秒
-        if let Some(result) = result_clone.lock().unwrap().take() {
-            return result;
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            attempts += 1;
         }
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        attempts += 1;
-    }
 
-    Err("操作超时".to_string())
+        Err("操作超时".to_string())
+    }
 }
 
 // 新建文件
