@@ -125,6 +125,14 @@ sequenceDiagram
     // 更新预览
     window.updatePreview = function() {
         try {
+            // 保存当前滚动位置，避免更新预览时跳转
+            const currentScrollTop = preview.scrollTop;
+            const currentScrollHeight = preview.scrollHeight;
+            
+            // 暂时禁用同步滚动，避免更新预览时触发滚动事件
+            const originalSyncScroll = syncScroll;
+            syncScroll = false;
+            
             // 检查highlight.js是否可用
             const hasHighlight = typeof hljs !== 'undefined';
             console.log('highlight.js可用:', hasHighlight);
@@ -155,6 +163,53 @@ sequenceDiagram
             const html = marked.parse(editor.value);
             preview.innerHTML = html;
             
+            // 恢复滚动位置的函数
+            const restoreScrollPosition = () => {
+                if (originalSyncScroll) {
+                    // 如果同步滚动开启，根据编辑器位置同步预览位置
+                    const editorScrollTop = editor.scrollTop;
+                    const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
+                    const newScrollHeight = preview.scrollHeight - preview.clientHeight;
+                    
+                    if (editorScrollHeight > 0 && newScrollHeight > 0) {
+                        const ratio = editorScrollTop / editorScrollHeight;
+                        const targetScrollTop = ratio * newScrollHeight;
+                        
+                        // 只有当目标位置与当前位置差异较大时才滚动
+                        if (Math.abs(preview.scrollTop - targetScrollTop) > 5) {
+                            preview.scrollTop = targetScrollTop;
+                        }
+                    }
+                } else {
+                    // 如果同步滚动关闭，保持预览的原始位置
+                    if (currentScrollHeight > 0) {
+                        const newScrollHeight = preview.scrollHeight;
+                        if (newScrollHeight > 0) {
+                            // 计算相对位置比例
+                            const ratio = currentScrollTop / currentScrollHeight;
+                            // 应用比例到新的内容高度
+                            const targetScrollTop = ratio * newScrollHeight;
+                            
+                            // 只有当目标位置与当前位置差异较大时才滚动
+                            if (Math.abs(preview.scrollTop - targetScrollTop) > 5) {
+                                preview.scrollTop = targetScrollTop;
+                            }
+                        }
+                    }
+                }
+            };
+            
+            // 立即恢复滚动位置
+            restoreScrollPosition();
+            
+            // 延迟恢复同步滚动状态，等待所有异步操作完成
+            setTimeout(() => {
+                // 再次恢复滚动位置，防止异步操作改变了内容高度
+                restoreScrollPosition();
+                // 恢复同步滚动状态
+                syncScroll = originalSyncScroll;
+            }, 300);
+            
             // 渲染Mermaid图表
             if (window.mermaid) {
                 mermaid.initialize({
@@ -167,20 +222,24 @@ sequenceDiagram
                 const mermaidElements = preview.querySelectorAll('pre code.language-mermaid');
                 mermaidElements.forEach((element, index) => {
                     const mermaidCode = element.textContent;
-      const mermaidDiv = document.createElement('div');
-      mermaidDiv.className = 'mermaid';
+                    const mermaidDiv = document.createElement('div');
+                    mermaidDiv.className = 'mermaid';
                     mermaidDiv.textContent = mermaidCode;
       
-      // 替换原来的代码块
-      const preElement = element.parentElement;
+                    // 替换原来的代码块
+                    const preElement = element.parentElement;
                     preElement.parentElement.replaceChild(mermaidDiv, preElement);
                     
                     // 渲染这个图表
                     mermaid.render(`mermaid-${index}`, mermaidCode).then(({ svg }) => {
                         mermaidDiv.innerHTML = svg;
+                        // Mermaid渲染完成后恢复滚动位置
+                        restoreScrollPosition();
                     }).catch(error => {
                         console.error('Mermaid渲染失败:', error);
                         mermaidDiv.innerHTML = `<p>流程图渲染失败: ${error.message}</p>`;
+                        // 即使渲染失败也要恢复滚动位置
+                        restoreScrollPosition();
                     });
                 });
             }
@@ -200,6 +259,10 @@ sequenceDiagram
                         }
                     }
                 });
+                // 代码高亮完成后恢复滚动位置
+                setTimeout(() => {
+                    restoreScrollPosition();
+                }, 50);
             } else {
                 console.log('highlight.js不可用，跳过代码高亮');
             }
@@ -228,8 +291,8 @@ sequenceDiagram
         
         if (!lightTheme || !darkTheme) {
             console.log('highlight.js主题样式未找到');
-      return;
-    }
+            return;
+        }
     
         console.log('当前主题:', theme);
         console.log('浅色主题状态:', lightTheme.disabled);
@@ -311,7 +374,7 @@ sequenceDiagram
         editor.value = '';
         window.currentFile = null;
         hasUnsavedChanges = false;
-    updatePreview();
+        updatePreview();
         updateTitle();
         editor.focus();
     }
@@ -327,36 +390,105 @@ sequenceDiagram
         editor.value = welcomeTemplate;
         window.currentFile = null;
         hasUnsavedChanges = false;
-    updatePreview();
+        updatePreview();
         updateTitle();
         editor.focus();
     }
     
-    // 同步滚动功能
+    // 同步滚动功能 - 使用更强大的防抖机制避免循环触发
+    let isScrollingEditor = false;
+    let isScrollingPreview = false;
+    let editorScrollTimeout = null;
+    let previewScrollTimeout = null;
+    let lastEditorScrollTime = 0;
+    let lastPreviewScrollTime = 0;
+    let lastEditorScrollTop = 0;
+    let lastPreviewScrollTop = 0;
+    
     function syncScrollToPreview() {
+        // 如果同步滚动未开启，直接返回，不执行任何操作
         if (!syncScroll) return;
         
+        if (isScrollingPreview) return;
+        
+        const now = Date.now();
         const editorScrollTop = editor.scrollTop;
+        
+        // 如果最近有预览区域滚动，忽略这次编辑器滚动
+        if (now - lastPreviewScrollTime < 200) return;
+        
+        // 如果滚动位置没有变化，忽略
+        if (Math.abs(editorScrollTop - lastEditorScrollTop) < 2) return;
+        
+        // 清除之前的定时器
+        if (editorScrollTimeout) {
+            clearTimeout(editorScrollTimeout);
+        }
+        
+        isScrollingEditor = true;
+        lastEditorScrollTime = now;
+        lastEditorScrollTop = editorScrollTop;
+        
         const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
         const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
         
-        if (editorScrollHeight > 0) {
+        if (editorScrollHeight > 0 && previewScrollHeight > 0) {
             const ratio = editorScrollTop / editorScrollHeight;
-            preview.scrollTop = ratio * previewScrollHeight;
+            const targetScrollTop = ratio * previewScrollHeight;
+            
+            // 只有当目标位置与当前位置差异较大时才滚动
+            if (Math.abs(preview.scrollTop - targetScrollTop) > 10) {
+                preview.scrollTop = targetScrollTop;
+            }
         }
+        
+        // 使用更长的防抖时间
+        editorScrollTimeout = setTimeout(() => {
+            isScrollingEditor = false;
+        }, 200);
     }
     
     function syncScrollToEditor() {
+        // 如果同步滚动未开启，直接返回，不执行任何操作
         if (!syncScroll) return;
         
+        if (isScrollingEditor) return;
+        
+        const now = Date.now();
         const previewScrollTop = preview.scrollTop;
+        
+        // 如果最近有编辑器滚动，忽略这次预览区域滚动
+        if (now - lastEditorScrollTime < 200) return;
+        
+        // 如果滚动位置没有变化，忽略
+        if (Math.abs(previewScrollTop - lastPreviewScrollTop) < 2) return;
+        
+        // 清除之前的定时器
+        if (previewScrollTimeout) {
+            clearTimeout(previewScrollTimeout);
+        }
+        
+        isScrollingPreview = true;
+        lastPreviewScrollTime = now;
+        lastPreviewScrollTop = previewScrollTop;
+        
         const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
         const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
         
-        if (previewScrollHeight > 0) {
+        if (previewScrollHeight > 0 && editorScrollHeight > 0) {
             const ratio = previewScrollTop / previewScrollHeight;
-            editor.scrollTop = ratio * editorScrollHeight;
+            const targetScrollTop = ratio * editorScrollHeight;
+            
+            // 只有当目标位置与当前位置差异较大时才滚动
+            if (Math.abs(editor.scrollTop - targetScrollTop) > 10) {
+                editor.scrollTop = targetScrollTop;
+            }
         }
+        
+        // 使用更长的防抖时间
+        previewScrollTimeout = setTimeout(() => {
+            isScrollingPreview = false;
+        }, 200);
     }
 
 // 切换同步滚动
@@ -522,10 +654,17 @@ function toggleSyncScroll() {
                 updatePreview();
                 updateTitle();
                 
-                // 将光标移到文件开头
+                // 将光标移到文件开头，暂时禁用同步滚动
+                const originalSyncScroll = syncScroll;
+                syncScroll = false;
                 editor.focus();
                 editor.setSelectionRange(0, 0);
                 editor.scrollTop = 0;
+                preview.scrollTop = 0;
+                // 恢复同步滚动
+                setTimeout(() => {
+                    syncScroll = originalSyncScroll;
+                }, 100);
             }
         }
     }
@@ -557,10 +696,17 @@ function toggleSyncScroll() {
                 if (window.updatePreview) window.updatePreview();
                 if (window.updateTitle) window.updateTitle();
                 
-                // 将光标移到文件开头，避免滚动到末尾
+                // 将光标移到文件开头，暂时禁用同步滚动
+                const originalSyncScroll = syncScroll;
+                syncScroll = false;
                 editor.focus();
                 editor.setSelectionRange(0, 0);
                 editor.scrollTop = 0;
+                preview.scrollTop = 0;
+                // 恢复同步滚动
+                setTimeout(() => {
+                    syncScroll = originalSyncScroll;
+                }, 100);
                 
                 console.log('文件打开成功:', filePath);
             } else {
@@ -575,10 +721,17 @@ function toggleSyncScroll() {
                         if (window.updatePreview) window.updatePreview();
                         if (window.updateTitle) window.updateTitle();
                         
-                        // 将光标移到文件开头
+                        // 将光标移到文件开头，暂时禁用同步滚动
+                        const originalSyncScroll = syncScroll;
+                        syncScroll = false;
                         editor.focus();
                         editor.setSelectionRange(0, 0);
                         editor.scrollTop = 0;
+                        preview.scrollTop = 0;
+                        // 恢复同步滚动
+                        setTimeout(() => {
+                            syncScroll = originalSyncScroll;
+                        }, 100);
                     }
                 }
             }
@@ -594,10 +747,17 @@ function toggleSyncScroll() {
                     if (window.updatePreview) window.updatePreview();
                     if (window.updateTitle) window.updateTitle();
                     
-                    // 将光标移到文件开头
+                    // 将光标移到文件开头，暂时禁用同步滚动
+                    const originalSyncScroll = syncScroll;
+                    syncScroll = false;
                     editor.focus();
                     editor.setSelectionRange(0, 0);
                     editor.scrollTop = 0;
+                    preview.scrollTop = 0;
+                    // 恢复同步滚动
+                    setTimeout(() => {
+                        syncScroll = originalSyncScroll;
+                    }, 100);
                 }
             }
         }
@@ -1009,10 +1169,20 @@ ${marked.parse(editor.value)}
     editor.addEventListener('scroll', syncScrollToPreview);
     preview.addEventListener('scroll', syncScrollToEditor);
     
-    // 编辑器输入事件
+    // 编辑器输入事件 - 添加防抖机制避免频繁更新预览
+    let previewUpdateTimeout = null;
     editor.addEventListener('input', () => {
         markAsChanged();
-        updatePreview();
+        
+        // 清除之前的定时器
+        if (previewUpdateTimeout) {
+            clearTimeout(previewUpdateTimeout);
+        }
+        
+        // 延迟更新预览，避免频繁重新渲染
+        previewUpdateTimeout = setTimeout(() => {
+            updatePreview();
+        }, 100);
     });
     
     // 撤销重做历史保存功能已移除
