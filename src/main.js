@@ -1169,6 +1169,55 @@ ${marked.parse(editor.value)}
     editor.addEventListener('scroll', syncScrollToPreview);
     preview.addEventListener('scroll', syncScrollToEditor);
     
+    // Tab 键支持 - 在编辑器中插入制表符而不是切换焦点
+    editor.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+            e.preventDefault(); // 阻止默认的焦点切换行为
+            
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            const value = editor.value;
+            
+            // 保存当前的编辑器滚动位置
+            const savedScrollTop = editor.scrollTop;
+            
+            if (e.shiftKey) {
+                // Shift+Tab: 取消缩进
+                // 找到当前行的开始位置
+                const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+                const lineEnd = value.indexOf('\n', start);
+                const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+                
+                // 检查行首是否有制表符或空格
+                if (value[lineStart] === '\t') {
+                    // 删除行首的制表符
+                    editor.value = value.substring(0, lineStart) + value.substring(lineStart + 1);
+                    // 调整光标位置
+                    const newStart = start > lineStart ? start - 1 : start;
+                    editor.selectionStart = editor.selectionEnd = newStart;
+                } else if (value.substring(lineStart, lineStart + 4) === '    ') {
+                    // 删除行首的4个空格
+                    editor.value = value.substring(0, lineStart) + value.substring(lineStart + 4);
+                    // 调整光标位置
+                    const newStart = start > lineStart + 3 ? start - 4 : lineStart;
+                    editor.selectionStart = editor.selectionEnd = newStart;
+                }
+            } else {
+                // Tab: 插入制表符
+                editor.value = value.substring(0, start) + '\t' + value.substring(end);
+                // 将光标移到制表符之后
+                editor.selectionStart = editor.selectionEnd = start + 1;
+            }
+            
+            // 恢复编辑器滚动位置，避免跳转
+            editor.scrollTop = savedScrollTop;
+            
+            // 触发 input 事件以更新预览
+            const inputEvent = new Event('input', { bubbles: true });
+            editor.dispatchEvent(inputEvent);
+        }
+    });
+    
     // 编辑器输入事件 - 添加防抖机制避免频繁更新预览
     let previewUpdateTimeout = null;
     editor.addEventListener('input', () => {
