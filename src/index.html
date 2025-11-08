@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/common.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/java.min.js"></script>
@@ -150,17 +149,43 @@
         </main>
     </div>
     
-    <!-- 调试面板 -->
-    <div id="debug-panel" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; max-width: 300px; z-index: 9999; display: none;">
-        <div id="debug-content"></div>
-        <button onclick="document.getElementById('debug-panel').style.display='none'" style="margin-top: 5px; padding: 2px 5px;">关闭</button>
+    <!-- 最近文件面板 -->
+    <div id="recent-files-modal" class="recent-files-modal" aria-hidden="true">
+        <div class="recent-files-dialog" role="dialog" aria-modal="true" aria-labelledby="recent-files-title">
+            <div class="recent-files-header">
+                <h3 id="recent-files-title">最近打开的文件</h3>
+                <button id="recent-files-close" class="btn btn-secondary btn-small" type="button" title="关闭 (Esc)">
+                    关闭
+                </button>
+            </div>
+            <div class="recent-files-body">
+                <p id="recent-files-empty">暂无最近记录</p>
+                <ul id="recent-files-list" class="recent-files-list" role="list"></ul>
+            </div>
+            <div class="recent-files-footer">
+                <span class="recent-files-hint">快捷键：Ctrl + Shift + R</span>
+            </div>
+        </div>
     </div>
-    
-    <!-- 调试按钮 (Release版本备用) -->
-    <div id="debug-toggle" style="position: fixed; top: 10px; right: 10px; z-index: 9998;">
-        <button onclick="toggleDebugPanel()" style="background: #4CAF50; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-size: 12px;">调试</button>
+
+    <!-- 链接文件预览面板 -->
+    <div id="linked-file-modal" class="linked-file-modal" aria-hidden="true">
+        <div class="linked-file-dialog" role="dialog" aria-modal="true" aria-labelledby="linked-file-title" tabindex="-1">
+            <div class="linked-file-header">
+                <div>
+                    <h3 id="linked-file-title">链接文件预览</h3>
+                    <p id="linked-file-path" class="linked-file-path"></p>
+                </div>
+                <button id="linked-file-close" class="btn btn-secondary btn-small" type="button" title="关闭 (Esc)">
+                    关闭
+                </button>
+            </div>
+            <div class="linked-file-body">
+                <div id="linked-file-content" class="linked-file-content"></div>
+            </div>
+        </div>
     </div>
-    
+
     <script src="main.js"></script>
 </body>
 </html>

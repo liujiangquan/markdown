@@ -11,18 +11,59 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:default",
-    "fs:allow-read-file",
-    "fs:allow-write-file",
-    "fs:allow-write-text-file",
-    "fs:allow-read-text-file",
-    "fs:scope",
-    "fs:scope-app",
-    "fs:scope-home",
-    "fs:scope-desktop",
-    "fs:scope-document",
     "fs:allow-read",
     "fs:allow-write",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "/home/breeze/Documents/code/markdown/*" },
+        { "path": "$APP/*" },
+        { "path": "$APPDATA/*" },
+        { "path": "$APPLOCALDATA/*" },
+        { "path": "$APPCONFIG/*" },
+        { "path": "$APPCACHE/*" },
+        { "path": "$HOME/*" },
+        { "path": "$DOCUMENT/*" },
+        { "path": "$DESKTOP/*" },
+        { "path": "$DATA/*" },
+        { "path": "$LOCALDATA/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        { "path": "/home/breeze/Documents/code/markdown/*" },
+        { "path": "$APP/*" },
+        { "path": "$APPDATA/*" },
+        { "path": "$APPLOCALDATA/*" },
+        { "path": "$APPCONFIG/*" },
+        { "path": "$APPCACHE/*" },
+        { "path": "$HOME/*" },
+        { "path": "$DOCUMENT/*" },
+        { "path": "$DATA/*" },
+        { "path": "$LOCALDATA/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "/home/breeze/Documents/code/markdown/*" },
+        { "path": "$APP/*" },
+        { "path": "$APPDATA/*" },
+        { "path": "$APPLOCALDATA/*" },
+        { "path": "$APPCONFIG/*" },
+        { "path": "$APPCACHE/*" },
+        { "path": "$HOME/*" },
+        { "path": "$DOCUMENT/*" },
+        { "path": "$DATA/*" },
+        { "path": "$LOCALDATA/*" }
+      ]
+    },
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
     "fs:read-all",
-    "fs:write-all"
+    "fs:write-all",
+    "shell:default",
+    "shell:allow-open"
   ]
 }

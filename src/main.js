@@ -3,14 +3,56 @@ let hasFileAssociationContent = false;
 
 // Markdown编辑器主应用
 document.addEventListener('DOMContentLoaded', () => {
-const editor = document.getElementById('markdown-editor');
+    const editor = document.getElementById('markdown-editor');
     const preview = document.getElementById('markdown-preview');
     
     if (!editor || !preview) {
         console.error('编辑器或预览元素未找到');
         return;
     }
-    
+
+    // 应用状态 - 使用全局变量确保一致性
+    window.currentFile = null;
+    let hasUnsavedChanges = false;
+    let syncScroll = true;
+    let isFullscreen = false;
+    const RECENT_FILES_STORAGE_KEY = 'markdown-editor-recent-files';
+    const MAX_RECENT_FILES = 10;
+    let recentFiles = [];
+    let recentPanelPreviouslyFocusedElement = null;
+
+    const recentModal = document.getElementById('recent-files-modal');
+    const recentList = document.getElementById('recent-files-list');
+    const recentEmptyState = document.getElementById('recent-files-empty');
+    const recentCloseBtn = document.getElementById('recent-files-close');
+    const linkedFileModal = document.getElementById('linked-file-modal');
+    const linkedFileContent = document.getElementById('linked-file-content');
+    const linkedFilePathElement = document.getElementById('linked-file-path');
+    const linkedFileCloseBtn = document.getElementById('linked-file-close');
+    let linkedFilePreviousFocus = null;
+
+    recentFiles = loadRecentFiles();
+    renderRecentFiles();
+    if (recentCloseBtn) {
+        recentCloseBtn.addEventListener('click', hideRecentFilesPanel);
+    }
+    if (linkedFileCloseBtn) {
+        linkedFileCloseBtn.addEventListener('click', hideLinkedFileModal);
+    }
+    if (linkedFileModal) {
+        linkedFileModal.addEventListener('click', (event) => {
+            if (event.target === linkedFileModal) {
+                hideLinkedFileModal();
+            }
+        });
+    }
+    if (recentModal) {
+        recentModal.addEventListener('click', (event) => {
+            if (event.target === recentModal) {
+                hideRecentFilesPanel();
+            }
+        });
+    }
     // 默认内容（空白文档）
     const defaultContent = '';
     
@@ -104,12 +146,6 @@ sequenceDiagram
 
 ---
 开始编写你的 Markdown 文档吧！`;
-  
-    // 应用状态 - 使用全局变量确保一致性
-    window.currentFile = null;
-    let hasUnsavedChanges = false;
-    let syncScroll = true;
-    let isFullscreen = false;
     
     // 撤销重做功能已移除
     
@@ -162,6 +198,25 @@ sequenceDiagram
             
             const html = marked.parse(editor.value);
             preview.innerHTML = html;
+
+            // 标记外部链接
+            const renderedLinks = preview.querySelectorAll('a[href]');
+            renderedLinks.forEach((link) => {
+                const href = link.getAttribute('href');
+                if (!href || href.startsWith('#')) {
+                    return;
+                }
+                try {
+                    const url = new URL(href, window.location.href);
+                    const isHttp = url.protocol === 'http:' || url.protocol === 'https:';
+                    if (isHttp) {
+                        link.classList.add('external-link');
+                        link.setAttribute('rel', 'noopener');
+                    }
+                } catch (error) {
+                    console.warn('链接解析失败，跳过外部标记:', href, error);
+                }
+            });
             
             // 恢复滚动位置的函数
             const restoreScrollPosition = () => {
@@ -513,6 +568,342 @@ function toggleSyncScroll() {
         }
     }
     
+    function loadRecentFiles() {
+        try {
+            const stored = localStorage.getItem(RECENT_FILES_STORAGE_KEY);
+            if (!stored) {
+                return [];
+            }
+            const parsed = JSON.parse(stored);
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+            return parsed
+                .map(normalizeRecentEntry)
+                .filter((entry) => entry !== null);
+        } catch (error) {
+            console.error('读取最近文件失败:', error);
+            return [];
+        }
+    }
+
+    function normalizeRecentEntry(entry) {
+        if (!entry) return null;
+        if (typeof entry === 'string') {
+            const normalizedPath = normalizeFilePath(entry);
+            return normalizedPath ? { path: normalizedPath, openedAt: null } : null;
+        }
+        if (typeof entry === 'object' && typeof entry.path === 'string') {
+            const normalizedPath = normalizeFilePath(entry.path);
+            if (!normalizedPath) {
+                return null;
+            }
+            return {
+                path: normalizedPath,
+                openedAt: typeof entry.openedAt === 'string' ? entry.openedAt : null
+            };
+        }
+        return null;
+    }
+
+    function persistRecentFiles(items) {
+        try {
+            localStorage.setItem(RECENT_FILES_STORAGE_KEY, JSON.stringify(items));
+        } catch (error) {
+            console.error('保存最近文件失败:', error);
+        }
+    }
+
+    function recordRecentFile(filePath) {
+        const normalizedPath = normalizeFilePath(filePath);
+        if (!normalizedPath) {
+            return;
+        }
+
+        recentFiles = recentFiles.filter((entry) => entry.path !== normalizedPath);
+        recentFiles.unshift({
+            path: normalizedPath,
+            openedAt: new Date().toISOString()
+        });
+
+        if (recentFiles.length > MAX_RECENT_FILES) {
+            recentFiles = recentFiles.slice(0, MAX_RECENT_FILES);
+        }
+
+        persistRecentFiles(recentFiles);
+
+        if (isRecentFilesPanelVisible()) {
+            renderRecentFiles();
+        }
+    }
+
+    function renderRecentFiles() {
+        if (!recentList || !recentEmptyState) {
+            return;
+        }
+
+        recentList.innerHTML = '';
+
+        if (!recentFiles.length) {
+            recentEmptyState.style.display = 'block';
+            recentList.hidden = true;
+            return;
+        }
+
+        recentEmptyState.style.display = 'none';
+        recentList.hidden = false;
+
+        recentFiles.forEach((entry) => {
+            const listItem = document.createElement('li');
+            listItem.className = 'recent-file-item';
+
+            const fileNameButton = document.createElement('button');
+            fileNameButton.type = 'button';
+            fileNameButton.className = 'recent-file-name';
+            fileNameButton.textContent = extractFileName(entry.path);
+            fileNameButton.addEventListener('click', () => handleRecentFileSelection(entry.path));
+
+            const filePathText = document.createElement('span');
+            filePathText.className = 'recent-file-path';
+            filePathText.textContent = entry.path;
+
+            listItem.appendChild(fileNameButton);
+            listItem.appendChild(filePathText);
+
+            if (entry.openedAt) {
+                const meta = document.createElement('span');
+                meta.className = 'recent-file-meta';
+                meta.textContent = `上次打开：${formatRecentTimestamp(entry.openedAt)}`;
+                listItem.appendChild(meta);
+            }
+
+            recentList.appendChild(listItem);
+        });
+    }
+
+    function showRecentFilesPanel() {
+        if (!recentModal) {
+            return;
+        }
+        recentPanelPreviouslyFocusedElement = document.activeElement;
+        renderRecentFiles();
+        recentModal.classList.add('show');
+        recentModal.setAttribute('aria-hidden', 'false');
+        recentModal.setAttribute('data-open', 'true');
+
+        setTimeout(() => {
+            const firstButton = recentList?.querySelector('button');
+            if (firstButton) {
+                firstButton.focus();
+            }
+        }, 0);
+    }
+
+    function hideRecentFilesPanel() {
+        if (!recentModal) {
+            return;
+        }
+        recentModal.classList.remove('show');
+        recentModal.setAttribute('aria-hidden', 'true');
+        recentModal.removeAttribute('data-open');
+
+        const targetToFocus =
+            recentPanelPreviouslyFocusedElement && typeof recentPanelPreviouslyFocusedElement.focus === 'function'
+                ? recentPanelPreviouslyFocusedElement
+                : editor;
+
+        if (targetToFocus && typeof targetToFocus.focus === 'function') {
+            targetToFocus.focus();
+        }
+
+        recentPanelPreviouslyFocusedElement = null;
+    }
+
+    function isRecentFilesPanelVisible() {
+        return recentModal?.classList.contains('show') ?? false;
+    }
+
+    function handleRecentFileSelection(filePath) {
+        hideRecentFilesPanel();
+        if (filePath) {
+            if (typeof window.openFileByPath === 'function') {
+                window.openFileByPath(filePath);
+            } else {
+                console.warn('openFileByPath 未定义，无法自动打开文件');
+            }
+        }
+    }
+
+    function normalizeFilePath(filePath) {
+        if (typeof filePath !== 'string') {
+            return '';
+        }
+        const trimmed = filePath.trim();
+        return trimmed.length ? trimmed : '';
+    }
+
+    function extractFileName(filePath) {
+        const normalized = normalizeFilePath(filePath);
+        if (!normalized) return '未知文件';
+        const segments = normalized.split(/[\\/]/);
+        return segments.pop() || normalized;
+    }
+
+    function formatRecentTimestamp(timestamp) {
+        try {
+            return new Date(timestamp).toLocaleString();
+        } catch (error) {
+            return timestamp;
+        }
+    }
+
+    async function openExternalLink(url) {
+        if (!url) return;
+
+        try {
+            if (window.__TAURI__ && window.__TAURI__.shell && typeof window.__TAURI__.shell.open === 'function') {
+                await window.__TAURI__.shell.open(url);
+                return;
+            }
+        } catch (error) {
+            console.error('通过Tauri shell打开外部链接失败:', error);
+        }
+
+        try {
+            if (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') {
+                await window.__TAURI__.core.invoke('plugin:shell|open', { uri: url });
+                return;
+            }
+        } catch (error) {
+            console.error('通过invoke打开外部链接失败:', error);
+        }
+
+        try {
+            window.open(url, '_blank', 'noopener');
+        } catch (error) {
+            console.error('通过浏览器打开外部链接失败:', error);
+        }
+    }
+
+    function resolveRelativePath(href) {
+        if (!href) {
+            return null;
+        }
+
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
+            // 已包含协议，交给其它处理
+            return null;
+        }
+
+        try {
+            if (href.startsWith('/')) {
+                return href;
+            }
+
+            if (!window.currentFile) {
+                return null;
+            }
+
+            const basePath = window.currentFile.startsWith('file://')
+                ? window.currentFile
+                : `file://${window.currentFile}`;
+            const url = new URL(href, basePath);
+            if (url.protocol !== 'file:') {
+                return null;
+            }
+
+            let resolvedPath = decodeURIComponent(url.pathname);
+            // Windows路径兼容: 去掉开头的斜杠
+            if (/^\/[A-Za-z]:/.test(resolvedPath)) {
+                resolvedPath = resolvedPath.slice(1);
+            }
+            return resolvedPath;
+        } catch (error) {
+            console.warn('解析相对路径失败:', href, error);
+            return null;
+        }
+    }
+
+    function showLinkedFileModal(path, markdownContent) {
+        if (!linkedFileModal || !linkedFileContent) {
+            return;
+        }
+
+        linkedFilePreviousFocus = document.activeElement;
+
+        linkedFileContent.innerHTML = marked.parse(markdownContent);
+        if (linkedFilePathElement) {
+            linkedFilePathElement.textContent = path;
+        }
+
+        if (typeof hljs !== 'undefined') {
+            linkedFileContent.querySelectorAll('pre code').forEach((block) => {
+                try {
+                    hljs.highlightElement(block);
+                } catch (error) {
+                    console.warn('链接文件代码高亮失败:', error);
+                }
+            });
+        }
+
+        linkedFileModal.classList.add('show');
+        linkedFileModal.setAttribute('aria-hidden', 'false');
+
+        requestAnimationFrame(() => {
+            if (linkedFileCloseBtn && typeof linkedFileCloseBtn.focus === 'function') {
+                linkedFileCloseBtn.focus({ preventScroll: true });
+            } else {
+                linkedFileModal.focus({ preventScroll: true });
+            }
+        });
+    }
+
+    function hideLinkedFileModal() {
+        if (!linkedFileModal) {
+            return;
+        }
+
+        linkedFileModal.classList.remove('show');
+        linkedFileModal.setAttribute('aria-hidden', 'true');
+
+        if (linkedFilePreviousFocus && typeof linkedFilePreviousFocus.focus === 'function') {
+            linkedFilePreviousFocus.focus();
+        }
+        linkedFilePreviousFocus = null;
+    }
+
+    function isLinkedFileModalVisible() {
+        return linkedFileModal?.classList.contains('show') ?? false;
+    }
+
+    async function handleRelativeLink(href) {
+        const resolvedPath = resolveRelativePath(href);
+        if (!resolvedPath) {
+            alert('无法解析链接指向的文件路径，请确认当前文档已保存并链接格式正确。');
+            return;
+        }
+
+        if (!window.__TAURI__ || !window.__TAURI__.fs) {
+            alert('无法访问文件系统，无法打开链接文件。');
+            return;
+        }
+
+        const { exists, readTextFile } = window.__TAURI__.fs;
+        try {
+            const fileExists = await exists(resolvedPath);
+            if (!fileExists) {
+                alert(`未找到链接指向的文件：\n${resolvedPath}`);
+                return;
+            }
+
+            const content = await readTextFile(resolvedPath);
+            showLinkedFileModal(resolvedPath, content);
+        } catch (error) {
+            console.error('打开链接文件失败:', error);
+            alert(`打开链接文件失败：${error.message || error}`);
+        }
+    }
+
     // 生成目录
     function generateTOC() {
         const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
@@ -691,6 +1082,7 @@ function toggleSyncScroll() {
                 editor.value = content;
                 window.currentFile = filePath; // 保存完整路径
                 hasUnsavedChanges = false;
+                recordRecentFile(filePath);
                 
                 // 更新预览和标题
                 if (window.updatePreview) window.updatePreview();
@@ -718,6 +1110,7 @@ function toggleSyncScroll() {
                         editor.value = content;
                         window.currentFile = '模拟文件.md';
                         hasUnsavedChanges = false;
+                        recordRecentFile(window.currentFile);
                         if (window.updatePreview) window.updatePreview();
                         if (window.updateTitle) window.updateTitle();
                         
@@ -744,6 +1137,7 @@ function toggleSyncScroll() {
     editor.value = content;
                     window.currentFile = '模拟文件.md';
                     hasUnsavedChanges = false;
+                    recordRecentFile(window.currentFile);
                     if (window.updatePreview) window.updatePreview();
                     if (window.updateTitle) window.updateTitle();
                     
@@ -806,6 +1200,7 @@ function toggleSyncScroll() {
                     console.log('invoke API保存成功');
                     hasUnsavedChanges = false;
                     updateTitle();
+                    recordRecentFile(window.currentFile);
                     console.log('文件保存成功');
     return;
                 } catch (invokeError) {
@@ -838,6 +1233,7 @@ function toggleSyncScroll() {
                 
                 hasUnsavedChanges = false;
                 updateTitle();
+                recordRecentFile(window.currentFile);
                 console.log('文件保存成功');
   } else {
                 console.log('Tauri API不可用，模拟保存文件');
@@ -881,6 +1277,7 @@ function toggleSyncScroll() {
                             window.currentFile = filePath;
                             hasUnsavedChanges = false;
                             updateTitle();
+                            recordRecentFile(filePath);
                             console.log('文件另存为成功');
     return;
                         } catch (invokeError) {
@@ -906,6 +1303,7 @@ function toggleSyncScroll() {
                     window.currentFile = filePath;
                     hasUnsavedChanges = false;
                     updateTitle();
+                    recordRecentFile(filePath);
                     console.log('文件另存为成功');
                 }
             } else {
@@ -1137,8 +1535,22 @@ ${marked.parse(editor.value)}
     
     // 键盘快捷键
     document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (isLinkedFileModalVisible()) {
+                e.preventDefault();
+                hideLinkedFileModal();
+                return;
+            }
+            if (isRecentFilesPanelVisible()) {
+                e.preventDefault();
+                hideRecentFilesPanel();
+                return;
+            }
+        }
+
         if (e.ctrlKey) {
-            switch (e.key) {
+            const key = e.key.toLowerCase();
+            switch (key) {
                 case 'n':
                     e.preventDefault();
                     createBlankDocument();
@@ -1153,6 +1565,16 @@ ${marked.parse(editor.value)}
                         saveAsFile();
                     } else {
                         saveFile();
+                    }
+                    break;
+                case 'r':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        if (isRecentFilesPanelVisible()) {
+                            hideRecentFilesPanel();
+                        } else {
+                            showRecentFilesPanel();
+                        }
                     }
                     break;
                 // 撤销重做快捷键已移除
@@ -1268,68 +1690,6 @@ ${marked.parse(editor.value)}
     
     // 撤销重做按钮状态初始化已移除
     
-    // 保存原始console方法
-    const originalLog = console.log;
-    const originalError = console.error;
-    
-    // 添加调试信息到面板
-    function addDebugInfo(message) {
-        const debugPanel = document.getElementById('debug-panel');
-        const debugContent = document.getElementById('debug-content');
-        if (debugPanel && debugContent) {
-            debugContent.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
-            debugPanel.scrollTop = debugContent.scrollHeight;
-        }
-        // 使用原始console.log避免无限递归
-        originalLog(message);
-    }
-    
-    // 显示调试面板
-    function showDebugPanel() {
-        const debugPanel = document.getElementById('debug-panel');
-        if (debugPanel) {
-            debugPanel.style.display = 'block';
-        }
-    }
-    
-    // 切换调试面板 (Release版本备用)
-    function toggleDebugPanel() {
-        const debugPanel = document.getElementById('debug-panel');
-        if (debugPanel) {
-            if (debugPanel.style.display === 'none' || debugPanel.style.display === '') {
-                debugPanel.style.display = 'block';
-            } else {
-                debugPanel.style.display = 'none';
-            }
-        }
-    }
-    
-    // 将函数暴露到全局作用域
-    window.toggleDebugPanel = toggleDebugPanel;
-    
-    // 添加键盘快捷键 Ctrl+Shift+D 显示调试面板
-    document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-            e.preventDefault();
-            showDebugPanel();
-        }
-    });
-    
-    // 重写console.log以同时显示在调试面板中
-    console.log = function(...args) {
-        originalLog.apply(console, args);
-        addDebugInfo(args.join(' '));
-    };
-    
-    // 重写console.error以同时显示在调试面板中
-    console.error = function(...args) {
-        originalError.apply(console, args);
-        addDebugInfo('ERROR: ' + args.join(' '));
-    };
-    
-    console.log('Markdown编辑器已初始化');
-    addDebugInfo('调试面板已初始化，按 Ctrl+Shift+D 显示/隐藏');
-    
     // 检查Tauri API是否可用
     function checkTauriAPI() {
         if (window.__TAURI__) {
@@ -1351,6 +1711,37 @@ ${marked.parse(editor.value)}
     
     // 设置文件关联事件监听
     setupFileAssociationListener();
+
+    preview.addEventListener('click', (event) => {
+        const anchor = event.target.closest('a');
+        if (!anchor) {
+            return;
+        }
+
+        const href = anchor.getAttribute('href');
+        if (!href || href.startsWith('#')) {
+            return;
+        }
+
+        const hasProtocol = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href);
+        if (hasProtocol) {
+            try {
+                const url = new URL(href, window.location.href);
+                const isHttp = url.protocol === 'http:' || url.protocol === 'https:';
+                if (!isHttp) {
+                    return;
+                }
+                event.preventDefault();
+                openExternalLink(url.toString());
+            } catch (error) {
+                console.warn('无法解析链接，按默认行为处理:', href, error);
+            }
+            return;
+        }
+
+        event.preventDefault();
+        handleRelativeLink(href);
+    });
 });
 
 // 文件关联事件监听
