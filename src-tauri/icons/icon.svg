@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景透明 -->
+  <rect width="512" height="512" fill="transparent"/>
+  
+  <!-- MD文字容器 - 简约圆角矩形 -->
+  <rect x="120" y="120" width="272" height="272" rx="40" fill="white" stroke="#667EEA" stroke-width="8"/>
+  
+  <!-- MD文字 - 大号粗体 -->
+  <text x="256" y="320" font-family="Arial, sans-serif" font-size="180" font-weight="bold" 
+        text-anchor="middle" fill="#667EEA">MD</text>
+  
+  <!-- Markdown装饰符号 - 简约风格 -->
+  <!-- 左上角 # 符号 -->
+  <g transform="translate(80, 80)">
+    <rect x="0" y="0" width="4" height="24" fill="#667EEA" rx="2"/>
+    <rect x="0" y="0" width="24" height="4" fill="#667EEA" rx="2"/>
+    <rect x="0" y="10" width="24" height="4" fill="#667EEA" rx="2"/>
+    <rect x="0" y="20" width="24" height="4" fill="#667EEA" rx="2"/>
+  </g>
+  
+  <!-- 右上角 * 符号 -->
+  <g transform="translate(408, 80)">
+    <polygon points="12,0 14,4 18,4 15,7 16,11 12,9 8,11 9,7 6,4 10,4" fill="#667EEA"/>
+  </g>
+  
+  <!-- 左下角 _ 符号 -->
+  <g transform="translate(80, 408)">
+    <rect x="0" y="0" width="24" height="4" fill="#667EEA" rx="2"/>
+  </g>
+  
+  <!-- 右下角 [] 符号 -->
+  <g transform="translate(408, 408)">
+    <rect x="0" y="0" width="4" height="24" fill="#667EEA" rx="2"/>
+    <rect x="20" y="0" width="4" height="24" fill="#667EEA" rx="2"/>
+    <rect x="0" y="0" width="8" height="4" fill="#667EEA" rx="2"/>
+    <rect x="16" y="0" width="8" height="4" fill="#667EEA" rx="2"/>
+    <rect x="0" y="20" width="8" height="4" fill="#667EEA" rx="2"/>
+    <rect x="16" y="20" width="8" height="4" fill="#667EEA" rx="2"/>
+  </g>
+</svg>
